@@ -14,7 +14,9 @@ from rich.table import Table
 
 from .core import DEFAULT_MEMORY_DIR, MemoryEngine, MemoryEntry
 from .export import export_markdown
+from .hooks import install_hooks, uninstall_hooks
 from .recall import build_context_brief
+from .sync import sync_project
 
 console = Console()
 
@@ -174,6 +176,42 @@ def load(project: str | None, output: str | None) -> None:
         console.print("\n[bold cyan]--- Agent Context Brief ---[/bold cyan]\n")
         console.print(brief)
         console.print("\n[dim]Copy the above into your agent's context.[/dim]")
+
+
+@main.command()
+@click.option("--project", "-p", help="Project name")
+def sync(project: str | None) -> None:
+    """Sync memory to CLAUDE.md in the current project."""
+    from .sync import sync_project
+
+    path = sync_project(project)
+    console.print(f"[green][OK][/green] Synced memory to [bold]{path}[/bold]")
+
+
+@main.group()
+def hook() -> None:
+    """Manage git hooks for AgentMemory."""
+    pass
+
+
+@hook.command("install")
+def hook_install() -> None:
+    """Install git hooks to auto-sync CLAUDE.md on commits."""
+    try:
+        pre, post = install_hooks()
+        console.print(f"[green][OK][/green] Installed git hooks:")
+        console.print(f"  - {pre.name}")
+        console.print(f"  - {post.name}")
+        console.print("\n[dim]CLAUDE.md will auto-sync before and after each commit.[/dim]")
+    except RuntimeError as e:
+        console.print(f"[red][ERROR][/red] {e}")
+
+
+@hook.command("uninstall")
+def hook_uninstall() -> None:
+    """Remove AgentMemory git hooks."""
+    uninstall_hooks()
+    console.print("[green][OK][/green] Removed AgentMemory git hooks.")
 
 
 @main.command()
