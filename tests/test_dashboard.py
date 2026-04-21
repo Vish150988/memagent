@@ -2,15 +2,12 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
-
-from agentmemory.core import MemoryEngine, MemoryEntry
 
 pytest.importorskip("fastapi")
 
 from fastapi.testclient import TestClient
+
 from agentmemory.dashboard import app
 
 

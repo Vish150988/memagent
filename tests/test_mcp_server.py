@@ -8,11 +8,10 @@ import pytest
 
 pytest.importorskip("fastmcp")
 
-from agentmemory.core import MemoryEngine, MemoryEntry
 from agentmemory.mcp_server import (
+    memory_capture,
     memory_recall,
     memory_search,
-    memory_capture,
     memory_stats,
 )
 
@@ -21,7 +20,7 @@ def test_mcp_memory_capture_and_recall() -> None:
     result = memory_capture("mcp-test", "MCP captured this", category="decision")
     data = json.loads(result)
     assert data["status"] == "stored"
-    memory_id = data["memory_id"]
+    assert "memory_id" in data
 
     result = memory_recall("mcp-test", limit=5)
     data = json.loads(result)

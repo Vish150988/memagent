@@ -6,12 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from agentmemory.core import MemoryEngine, MemoryEntry
 from agentmemory.auto_capture import (
+    _get_powershell_history_path,
     capture_from_git_log,
     capture_from_shell_history,
-    _get_powershell_history_path,
 )
+from agentmemory.core import MemoryEngine
 
 
 @pytest.fixture
