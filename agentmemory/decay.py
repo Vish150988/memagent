@@ -57,16 +57,7 @@ def decay_confidence(
             archived += 1
 
         if abs(new_confidence - m.confidence) > 0.001 and not dry_run:
-            # Update via direct SQL since core doesn't have update yet
-            conn = engine._connection()
-            try:
-                conn.execute(
-                    "UPDATE memories SET confidence = ? WHERE id = ?",
-                    (round(new_confidence, 4), m.id),
-                )
-                conn.commit()
-            finally:
-                engine._close(conn)
+            engine.update_memory(m.id, {"confidence": round(new_confidence, 4)})
             updated += 1
         else:
             unchanged += 1
@@ -90,20 +81,13 @@ def reinforce_memory(engine: MemoryEngine, memory_id: int, boost: float = 0.1) -
     Returns:
         True if updated, False if not found
     """
-    conn = engine._connection()
-    try:
-        row = conn.execute(
-            "SELECT confidence FROM memories WHERE id = ?", (memory_id,)
-        ).fetchone()
-        if not row:
-            return False
+    memory = engine.get_memory_by_id(memory_id)
+    if memory is None:
+        return False
 
-        new_confidence = min(1.0, row["confidence"] + boost)
-        conn.execute(
-            "UPDATE memories SET confidence = ?, timestamp = ? WHERE id = ?",
-            (new_confidence, datetime.now(timezone.utc).isoformat(), memory_id),
-        )
-        conn.commit()
-        return True
-    finally:
-        engine._close(conn)
+    new_confidence = min(1.0, memory.confidence + boost)
+    engine.update_memory(
+        memory_id,
+        {"confidence": new_confidence},
+    )
+    return True

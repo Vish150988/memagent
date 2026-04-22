@@ -1,9 +1,8 @@
-"""Core memory engine backed by SQLite."""
+"""Core memory engine backed by pluggable storage backends."""
 
 from __future__ import annotations
 
-import json
-import sqlite3
+import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -33,115 +32,39 @@ class MemoryEntry:
             self.timestamp = datetime.now(timezone.utc).isoformat()
 
 
+def _resolve_backend(backend: str, db_path: Path | None = None):
+    """Resolve a backend name to a backend instance."""
+    from .backends import SQLiteBackend
+
+    if backend == "auto":
+        if os.environ.get("DATABASE_URL"):
+            try:
+                from .backends import PostgresBackend
+
+                return PostgresBackend()
+            except ImportError:
+                pass
+        return SQLiteBackend(db_path)
+    if backend == "sqlite":
+        return SQLiteBackend(db_path)
+    if backend == "postgres":
+        from .backends import PostgresBackend
+
+        return PostgresBackend()
+    raise ValueError(f"Unknown backend: {backend}")
+
+
 class MemoryEngine:
-    """SQLite-backed memory engine."""
+    """Memory engine that delegates to a pluggable storage backend."""
 
-    def __init__(self, db_path: Optional[Path] = None):
+    def __init__(self, db_path: Optional[Path] = None, backend: str = "auto"):
         self.db_path = db_path or DEFAULT_DB_PATH
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._init_db()
-
-    def _connection(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        return conn
-
-    def _close(self, conn: sqlite3.Connection) -> None:
-        conn.close()
-
-    def _init_db(self) -> None:
-        conn = self._connection()
-        try:
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS memories (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    project TEXT NOT NULL DEFAULT 'default',
-                    session_id TEXT NOT NULL,
-                    timestamp TEXT NOT NULL,
-                    category TEXT NOT NULL DEFAULT 'fact',
-                    content TEXT NOT NULL,
-                    confidence REAL NOT NULL DEFAULT 1.0,
-                    source TEXT NOT NULL DEFAULT '',
-                    tags TEXT NOT NULL DEFAULT '',
-                    metadata TEXT NOT NULL DEFAULT '{}'
-                )
-                """
-            )
-            conn.execute(
-                """
-                CREATE INDEX IF NOT EXISTS idx_memories_project ON memories(project)
-                """
-            )
-            conn.execute(
-                """
-                CREATE INDEX IF NOT EXISTS idx_memories_session ON memories(session_id)
-                """
-            )
-            conn.execute(
-                """
-                CREATE INDEX IF NOT EXISTS idx_memories_category ON memories(category)
-                """
-            )
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS projects (
-                    name TEXT PRIMARY KEY,
-                    description TEXT,
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL,
-                    context TEXT NOT NULL DEFAULT '{}'  -- JSON: key files, conventions, stack
-                )
-                """
-            )
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS embeddings (
-                    memory_id INTEGER PRIMARY KEY,
-                    model_name TEXT NOT NULL,
-                    embedding_json TEXT NOT NULL,
-                    created_at TEXT NOT NULL,
-                    FOREIGN KEY (memory_id) REFERENCES memories(id) ON DELETE CASCADE
-                )
-                """
-            )
-            conn.execute(
-                """
-                CREATE INDEX IF NOT EXISTS idx_embeddings_model ON embeddings(model_name)
-                """
-            )
-            conn.commit()
-        finally:
-            self._close(conn)
+        self.backend = _resolve_backend(backend, db_path)
+        self.backend.init()
 
     def store(self, entry: MemoryEntry) -> int:
         """Store a memory entry. Returns the inserted row ID."""
-        conn = self._connection()
-        try:
-            cursor = conn.execute(
-                """
-                INSERT INTO memories (
-                    project, session_id, timestamp, category,
-                    content, confidence, source, tags, metadata
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    entry.project,
-                    entry.session_id,
-                    entry.timestamp,
-                    entry.category,
-                    entry.content,
-                    entry.confidence,
-                    entry.source,
-                    entry.tags,
-                    entry.metadata,
-                ),
-            )
-            conn.commit()
-            return cursor.lastrowid  # type: ignore[return-value]
-        finally:
-            self._close(conn)
+        return self.backend.store(entry)
 
     def recall(
         self,
@@ -151,28 +74,7 @@ class MemoryEngine:
         session_id: Optional[str] = None,
     ) -> list[MemoryEntry]:
         """Recall memories with optional filtering."""
-        query = "SELECT * FROM memories WHERE 1=1"
-        params: list[Any] = []
-
-        if project:
-            query += " AND project = ?"
-            params.append(project)
-        if category:
-            query += " AND category = ?"
-            params.append(category)
-        if session_id:
-            query += " AND session_id = ?"
-            params.append(session_id)
-
-        query += " ORDER BY timestamp DESC LIMIT ?"
-        params.append(limit)
-
-        conn = self._connection()
-        try:
-            rows = conn.execute(query, params).fetchall()
-            return [MemoryEntry(**dict(row)) for row in rows]
-        finally:
-            self._close(conn)
+        return self.backend.recall(project, category, limit, session_id)
 
     def search(
         self,
@@ -181,35 +83,11 @@ class MemoryEngine:
         limit: int = 20,
     ) -> list[MemoryEntry]:
         """Simple keyword search over memory content."""
-        query = "SELECT * FROM memories WHERE content LIKE ?"
-        params: list[Any] = [f"%{keyword}%"]
-
-        if project:
-            query += " AND project = ?"
-            params.append(project)
-
-        query += " ORDER BY timestamp DESC LIMIT ?"
-        params.append(limit)
-
-        conn = self._connection()
-        try:
-            rows = conn.execute(query, params).fetchall()
-            return [MemoryEntry(**dict(row)) for row in rows]
-        finally:
-            self._close(conn)
+        return self.backend.search(keyword, project, limit)
 
     def get_project_context(self, project: str) -> dict[str, Any]:
         """Get stored project context."""
-        conn = self._connection()
-        try:
-            row = conn.execute(
-                "SELECT context FROM projects WHERE name = ?", (project,)
-            ).fetchone()
-            if row:
-                return json.loads(row["context"])
-            return {}
-        finally:
-            self._close(conn)
+        return self.backend.get_project_context(project)
 
     def set_project_context(
         self,
@@ -218,95 +96,40 @@ class MemoryEngine:
         description: str = "",
     ) -> None:
         """Set or update project context."""
-        now = datetime.now(timezone.utc).isoformat()
-        conn = self._connection()
-        try:
-            conn.execute(
-                """
-                INSERT INTO projects (name, description, created_at, updated_at, context)
-                VALUES (?, ?, ?, ?, ?)
-                ON CONFLICT(name) DO UPDATE SET
-                    description=excluded.description,
-                    updated_at=excluded.updated_at,
-                    context=excluded.context
-                """,
-                (project, description, now, now, json.dumps(context)),
-            )
-            conn.commit()
-        finally:
-            self._close(conn)
+        self.backend.set_project_context(project, context, description)
 
     def stats(self) -> dict[str, Any]:
         """Return basic stats about the memory store."""
-        conn = self._connection()
-        try:
-            total = conn.execute("SELECT COUNT(*) as c FROM memories").fetchone()["c"]
-            projects = conn.execute(
-                "SELECT COUNT(DISTINCT project) as c FROM memories"
-            ).fetchone()["c"]
-            sessions = conn.execute(
-                "SELECT COUNT(DISTINCT session_id) as c FROM memories"
-            ).fetchone()["c"]
-            categories = conn.execute(
-                "SELECT category, COUNT(*) as c FROM memories GROUP BY category"
-            ).fetchall()
-            return {
-                "total_memories": total,
-                "projects": projects,
-                "sessions": sessions,
-                "by_category": {row["category"]: row["c"] for row in categories},
-            }
-        finally:
-            self._close(conn)
+        return self.backend.stats()
 
     def delete_project(self, project: str) -> int:
         """Delete all memories for a project. Returns number of rows deleted."""
-        conn = self._connection()
-        try:
-            cursor = conn.execute("DELETE FROM memories WHERE project = ?", (project,))
-            conn.execute("DELETE FROM projects WHERE name = ?", (project,))
-            conn.commit()
-            return cursor.rowcount
-        finally:
-            self._close(conn)
+        return self.backend.delete_project(project)
 
     def store_embedding(
         self, memory_id: int, model_name: str, embedding: list[float]
     ) -> None:
         """Store a vector embedding for a memory."""
-        now = datetime.now(timezone.utc).isoformat()
-        conn = self._connection()
-        try:
-            conn.execute(
-                """
-                INSERT INTO embeddings (memory_id, model_name, embedding_json, created_at)
-                VALUES (?, ?, ?, ?)
-                ON CONFLICT(memory_id) DO UPDATE SET
-                    model_name=excluded.model_name,
-                    embedding_json=excluded.embedding_json,
-                    created_at=excluded.created_at
-                """,
-                (memory_id, model_name, json.dumps(embedding), now),
-            )
-            conn.commit()
-        finally:
-            self._close(conn)
+        self.backend.store_embedding(memory_id, model_name, embedding)
 
     def get_embeddings(
         self, project: str, model_name: str
     ) -> list[tuple[int, list[float]]]:
         """Retrieve all embeddings for a project matching a model."""
-        conn = self._connection()
-        try:
-            rows = conn.execute(
-                """
-                SELECT e.memory_id, e.embedding_json
-                FROM embeddings e
-                JOIN memories m ON e.memory_id = m.id
-                WHERE m.project = ? AND e.model_name = ?
-                """,
-                (project, model_name),
-            ).fetchall()
-            return [(row["memory_id"], json.loads(row["embedding_json"])) for row in rows]
-        finally:
-            self._close(conn)
+        return self.backend.get_embeddings(project, model_name)
+
+    def list_projects(self) -> list[str]:
+        """Return a list of all distinct project names."""
+        return self.backend.list_projects()
+
+    def get_memory_by_id(self, memory_id: int) -> MemoryEntry | None:
+        """Get a single memory by ID."""
+        return self.backend.get_memory_by_id(memory_id)
+
+    def update_memory(self, memory_id: int, updates: dict[str, Any]) -> bool:
+        """Update fields of an existing memory. Returns True if found."""
+        return self.backend.update_memory(memory_id, updates)
+
+    def delete_memory(self, memory_id: int) -> bool:
+        """Delete a single memory by ID. Returns True if deleted."""
+        return self.backend.delete_memory(memory_id)

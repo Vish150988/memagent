@@ -51,7 +51,7 @@ def _get_project() -> str:
 
 
 @click.group()
-@click.version_option(version="0.3.1")
+@click.version_option(version="0.3.2")
 def main() -> None:
     """AgentMemory — Cross-agent memory layer for AI coding agents."""
     pass
@@ -59,7 +59,14 @@ def main() -> None:
 
 @main.command()
 @click.option("--project", "-p", help="Project name (auto-detected by default)")
-def init(project: str | None) -> None:
+@click.option(
+    "--backend",
+    "-b",
+    default="auto",
+    type=click.Choice(["auto", "sqlite", "postgres"]),
+    help="Storage backend",
+)
+def init(project: str | None, backend: str) -> None:
     """Initialize agent memory for the current project."""
     project = project or _get_project()
     engine = MemoryEngine()
@@ -610,6 +617,45 @@ def import_(source_path: str, fmt: str, project: str | None) -> None:
     elif fmt == "json":
         count = import_from_json(path, project, engine=engine)
         console.print(f"[green][OK][/green] Imported {count} memories from JSON")
+
+
+@main.command()
+@click.option("--from-backend", "-f", default="sqlite", type=click.Choice(["sqlite", "postgres"]))
+@click.option("--to-backend", "-t", default="postgres", type=click.Choice(["sqlite", "postgres"]))
+@click.option("--project", "-p", help="Project to migrate (default: all)")
+def migrate(from_backend: str, to_backend: str, project: str | None) -> None:
+    """Migrate memories from one backend to another."""
+    from .core import MemoryEngine
+
+    if from_backend == to_backend:
+        console.print("[yellow]Source and target backend are the same. Nothing to do.[/yellow]")
+        return
+
+    source = MemoryEngine(backend=from_backend)
+    target = MemoryEngine(backend=to_backend)
+
+    if project:
+        memories = source.recall(project=project, limit=100000)
+    else:
+        # Get all memories across all projects
+        memories = source.recall(limit=100000)
+
+    imported = 0
+    for m in memories:
+        # Reset ID so target generates a new one
+        m.id = None
+        target.store(m)
+        imported += 1
+
+    # Migrate project contexts
+    for proj in source.list_projects():
+        ctx = source.get_project_context(proj)
+        if ctx:
+            target.set_project_context(proj, ctx)
+
+    console.print(f"[green][OK][/green] Migrated [bold]{imported}[/bold] memories")
+    console.print(f"  From: {from_backend}")
+    console.print(f"  To: {to_backend}")
 
 
 @main.command()

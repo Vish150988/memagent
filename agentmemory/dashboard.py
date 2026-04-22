@@ -219,15 +219,7 @@ def api_capture(payload: dict[str, Any]) -> dict[str, Any]:
 @app.get("/api/projects")
 def api_projects() -> dict[str, Any]:
     engine = MemoryEngine()
-    # Fetch distinct projects from DB
-    conn = engine._connection()
-    try:
-        rows = conn.execute(
-            "SELECT DISTINCT project FROM memories ORDER BY project"
-        ).fetchall()
-        return {"projects": [row["project"] for row in rows]}
-    finally:
-        engine._close(conn)
+    return {"projects": engine.list_projects()}
 
 
 @app.get("/api/graph")

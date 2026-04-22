@@ -73,16 +73,10 @@ def api_list_memories(
 @app.get("/api/memories/{memory_id}")
 def api_get_memory(memory_id: int) -> dict[str, Any]:
     engine = _engine()
-    conn = engine._connection()
-    try:
-        row = conn.execute(
-            "SELECT * FROM memories WHERE id = ?", (memory_id,)
-        ).fetchone()
-        if not row:
-            raise HTTPException(status_code=404, detail="Memory not found")
-        return _memory_to_dict(MemoryEntry(**dict(row)))
-    finally:
-        engine._close(conn)
+    memory = engine.get_memory_by_id(memory_id)
+    if memory is None:
+        raise HTTPException(status_code=404, detail="Memory not found")
+    return _memory_to_dict(memory)
 
 
 @app.post("/api/memories")
@@ -106,42 +100,24 @@ def api_create_memory(payload: dict[str, Any]) -> dict[str, Any]:
 @app.put("/api/memories/{memory_id}")
 def api_update_memory(memory_id: int, payload: dict[str, Any]) -> dict[str, Any]:
     engine = _engine()
-    conn = engine._connection()
-    try:
-        row = conn.execute(
-            "SELECT * FROM memories WHERE id = ?", (memory_id,)
-        ).fetchone()
-        if not row:
-            raise HTTPException(status_code=404, detail="Memory not found")
+    allowed = {"content", "category", "confidence", "tags"}
+    updates = {k: v for k, v in payload.items() if k in allowed}
+    if not updates:
+        return {"id": memory_id, "status": "unchanged"}
 
-        allowed = ["content", "category", "confidence", "tags"]
-        updates = {k: v for k, v in payload.items() if k in allowed}
-        if not updates:
-            return {"id": memory_id, "status": "unchanged"}
-
-        set_clause = ", ".join(f"{k} = ?" for k in updates)
-        conn.execute(
-            f"UPDATE memories SET {set_clause} WHERE id = ?",
-            (*updates.values(), memory_id),
-        )
-        conn.commit()
-        return {"id": memory_id, "status": "updated"}
-    finally:
-        engine._close(conn)
+    updated = engine.update_memory(memory_id, updates)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Memory not found")
+    return {"id": memory_id, "status": "updated"}
 
 
 @app.delete("/api/memories/{memory_id}")
 def api_delete_memory(memory_id: int) -> dict[str, Any]:
     engine = _engine()
-    conn = engine._connection()
-    try:
-        cursor = conn.execute("DELETE FROM memories WHERE id = ?", (memory_id,))
-        conn.commit()
-        if cursor.rowcount == 0:
-            raise HTTPException(status_code=404, detail="Memory not found")
-        return {"id": memory_id, "status": "deleted"}
-    finally:
-        engine._close(conn)
+    deleted = engine.delete_memory(memory_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Memory not found")
+    return {"id": memory_id, "status": "deleted"}
 
 
 @app.get("/api/search")
@@ -158,14 +134,7 @@ def api_search(
 @app.get("/api/projects")
 def api_projects() -> dict[str, Any]:
     engine = _engine()
-    conn = engine._connection()
-    try:
-        rows = conn.execute(
-            "SELECT DISTINCT project FROM memories ORDER BY project"
-        ).fetchall()
-        return {"projects": [row["project"] for row in rows]}
-    finally:
-        engine._close(conn)
+    return {"projects": engine.list_projects()}
 
 
 @app.get("/api/stats")

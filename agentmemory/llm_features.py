@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from .core import MemoryEngine, MemoryEntry
+from .core import MemoryEngine
 from .llm import LLMClient, get_llm_client
 from .semantic import SemanticIndex
 
@@ -106,18 +106,8 @@ def generate_weekly_digest(
 
     # Get memories from the last 7 days
     cutoff = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
-    conn = engine._connection()
-    try:
-        query = "SELECT * FROM memories WHERE timestamp > ?"
-        params: list[Any] = [cutoff]
-        if project:
-            query += " AND project = ?"
-            params.append(project)
-        query += " ORDER BY timestamp DESC"
-        rows = conn.execute(query, params).fetchall()
-        memories = [MemoryEntry(**dict(row)) for row in rows]
-    finally:
-        engine._close(conn)
+    all_memories = engine.recall(project=project, limit=10000)
+    memories = [m for m in all_memories if m.timestamp > cutoff]
 
     if not memories:
         return "No memories captured in the last 7 days."

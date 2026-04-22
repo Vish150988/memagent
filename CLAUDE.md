@@ -6,22 +6,26 @@
 
 Project: agentmemory
 
+Working directory: C:\Users\vishn\projects\agentmemory
+
 ## Conventions & Preferences
 
-_None recorded yet._
+- Preference: Use pytest.importorskip for optional dependencies so tests gracefully skip when fastmcp/fastapi not installed
+- Preference: Ruff for linting with 100 char line length, import sorting (I001), and per-file-ignores for embedded templates
 
 ## Recent Decisions
 
-_None recorded yet._
+- Architecture decision: Modular file-per-feature design so each feature can be added without breaking existing code
+- Architecture decision: SQLite single-file storage over client-server database for portability and zero-config deployment
 
 ## Known Issues
 
-_None recorded yet._
+- Error: Windows Unicode issues with Rich console — fixed by using [OK] instead of checkmark emoji
 
 ## Architecture
 
-_None recorded yet._
+- User is Vish150988 on GitHub, @Vicky_1388 on Twitter, building open-source AI tools
 
 ---
 
-*Last updated: 2026-04-22T00:17:01.655897+00:00*
+*Last updated: 2026-04-22T00:44:58.649927+00:00*

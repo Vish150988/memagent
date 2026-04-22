@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agentmemory"
-version = "0.3.1"
+version = "0.3.2"
 description = "Open-source cross-agent memory layer for AI coding agents"
 readme = "README.md"
 license = {text = "MIT"}
@@ -45,11 +45,15 @@ dashboard = [
     "fastapi>=0.110",
     "uvicorn>=0.25",
 ]
+postgres = [
+    "psycopg>=3.0",
+]
 all = [
     "sentence-transformers>=3.0",
     "fastmcp>=3.0",
     "fastapi>=0.110",
     "uvicorn>=0.25",
+    "psycopg>=3.0",
 ]
 
 [project.scripts]
