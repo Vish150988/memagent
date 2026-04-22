@@ -77,6 +77,9 @@ def test_postgres_backend_crud() -> None:
 
     from agentmemory.backends import PostgresBackend
 
+    if PostgresBackend is None:
+        pytest.skip("psycopg not installed")
+
     backend = PostgresBackend()
     backend.init()
 
