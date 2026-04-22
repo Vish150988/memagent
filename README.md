@@ -46,6 +46,9 @@ Every time you start a new session with Claude Code, Codex, or Cursor, your agen
 | **Smart auto-tagging** | ✅ | LLM-generated tags for every memory. |
 | **Conflict detection** | ✅ | Detect contradictory memories automatically. |
 | **REST API** | ✅ | Full HTTP API for any integration. |
+| **Backup & restore** | ✅ | Export/import memories, projects, and embeddings as `.zip` or `.json`. |
+| **Config file** | ✅ | `~/.agent-memory/config.yaml` for persistent backend and LLM settings. |
+| **FTS5 search** | ✅ | Ranked full-text search with SQLite FTS5 (falls back to LIKE). |
 
 ---
 
@@ -176,6 +179,12 @@ agentmemory graph                         # Build relationship graph
 agentmemory mcp                           # Start MCP server (stdio)
 agentmemory dashboard                     # Start web dashboard on :8745
 agentmemory server                        # Start REST API on :8746
+
+# Backup & restore
+agentmemory backup                        # Create dated .zip backup
+agentmemory backup -p my-project          # Backup single project
+agentmemory restore backup.zip            # Restore from backup
+agentmemory restore backup.zip --dry-run  # Preview restore
 
 # Management
 agentmemory stats                         # Show statistics
@@ -326,6 +335,10 @@ agentmemory migrate --from-db-path ./old.db --to-dsn postgresql://user:pass@host
 - [x] Social sharing
 - [x] VS Code extension
 - [x] Pluggable storage backends (SQLite + PostgreSQL)
+- [x] Schema versioning
+- [x] Backup & restore
+- [x] Config file support
+- [x] FTS5 full-text search
 
 ---
 

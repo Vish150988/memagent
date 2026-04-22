@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.7] - 2026-04-21
+
+### Added
+- SQLite FTS5 full-text search (`memories_fts` virtual table):
+  - Ranked search using `bm25` relevance scoring.
+  - Fallback to `LIKE` search when FTS5 is unavailable.
+  - Manual sync in `store()`, `update_memory()`, `delete_memory()` (no triggers).
+- PyPI auto-publish workflow (`.github/workflows/publish.yml`):
+  - Builds and publishes to PyPI on every `v*` tag push via trusted publishing (OIDC).
+- `tests/test_fts5.py` covering FTS5 search, ranking, and LIKE fallback.
+
+### Changed
+- Hardened GitHub Actions CI:
+  - Uses `python -m ruff` / `python -m pytest` for PATH reliability.
+  - Added `pg_isready` retry loop in `test-postgres` job.
+- PyPI URLs in `pyproject.toml` updated to `Vish150988`.
+
+### Fixed
+- Legacy FTS5 triggers from earlier dev builds are auto-dropped on init.
+- Flaky `test_team_import_adds_new_memories` handles duplicate exports across timestamps.
+
+## [0.3.6] - 2026-04-21
+
+### Added
+- Configuration file support (`agentmemory/config.py`):
+  - Auto-creates `~/.agent-memory/config.yaml` on first access.
+  - Supports `backend`, `db_path`, `database_url`, and `llm` settings.
+  - Env vars override config values (`AGENTMEMORY_BACKEND`, `AGENTMEMORY_DB_PATH`).
+- `MemoryEngine()` reads backend and db_path from config + env vars automatically.
+- Dashboard inline memory editing:
+  - `PATCH /api/memories/{id}` endpoint.
+  - ✎ edit button per row with prompt-based editing of content, category, confidence, and tags.
+- `tests/test_config.py` for config loading, value resolution, and env override.
+- `pyyaml>=6.0` added to `[dev]` and `[all]` optional dependencies.
+
+### Fixed
+- Reverted aggressive SQLite connection caching that caused Windows file-lock errors.
+- SQLite backend returns to per-query open/close with WAL mode retained.
+
 ## [0.3.5] - 2026-04-21
 
 ### Added
