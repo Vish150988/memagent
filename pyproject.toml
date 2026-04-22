@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agentmemory"
-version = "0.3.0"
+version = "0.3.1"
 description = "Open-source cross-agent memory layer for AI coding agents"
 readme = "README.md"
 license = {text = "MIT"}

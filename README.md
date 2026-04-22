@@ -42,6 +42,10 @@ Every time you start a new session with Claude Code, Codex, or Cursor, your agen
 | **Mem0 importer** | ✅ | Migrate from Mem0 to AgentMemory. |
 | **Social sharing** | ✅ | Auto-post milestones to Twitter/LinkedIn. |
 | **VS Code extension** | ✅ | Capture memories directly from your editor. |
+| **LLM summarization** | ✅ | GPT/Claude-powered project & session summaries. |
+| **Smart auto-tagging** | ✅ | LLM-generated tags for every memory. |
+| **Conflict detection** | ✅ | Detect contradictory memories automatically. |
+| **REST API** | ✅ | Full HTTP API for any integration. |
 
 ---
 
@@ -121,11 +125,16 @@ Now `CLAUDE.md` updates automatically every time you commit.
 # Core memory operations
 agentmemory init                          # Initialize memory for project
 agentmemory capture "content"             # Store a memory
+agentmemory capture "..." --auto-tag      # Auto-generate tags with LLM
 agentmemory recall                        # List recent memories
 agentmemory search "keyword"              # Keyword search
 agentmemory related "query"               # Semantic search
 agentmemory summarize                     # Auto-summarize project
+agentmemory summarize --llm               # LLM-powered rich summary
 agentmemory summarize --session ID        # Summarize one session
+agentmemory digest                        # Weekly digest
+agentmemory digest --llm                  # LLM-powered weekly digest
+agentmemory check-conflicts               # Detect contradictory memories
 agentmemory reinforce <id>                # Boost memory confidence
 agentmemory decay                         # Apply confidence decay
 agentmemory decay --dry-run               # Preview decay
@@ -163,9 +172,10 @@ agentmemory post "Milestone!"             # Post to Twitter/LinkedIn
 # Memory graph
 agentmemory graph                         # Build relationship graph
 
-# MCP server & dashboard
+# MCP server & dashboard & API
 agentmemory mcp                           # Start MCP server (stdio)
 agentmemory dashboard                     # Start web dashboard on :8745
+agentmemory server                        # Start REST API on :8746
 
 # Management
 agentmemory stats                         # Show statistics

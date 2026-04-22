@@ -51,7 +51,7 @@ def _get_project() -> str:
 
 
 @click.group()
-@click.version_option(version="0.3.0")
+@click.version_option(version="0.3.1")
 def main() -> None:
     """AgentMemory — Cross-agent memory layer for AI coding agents."""
     pass
@@ -92,6 +92,7 @@ def init(project: str | None) -> None:
 @click.option("--confidence", default=1.0, type=float)
 @click.option("--tags", "-t", default="", help="Comma-separated tags")
 @click.option("--source", "-s", default="user", help="Source of the memory")
+@click.option("--auto-tag", is_flag=True, help="Auto-generate tags using LLM")
 def capture(
     content: str,
     project: str | None,
@@ -99,12 +100,20 @@ def capture(
     confidence: float,
     tags: str,
     source: str,
+    auto_tag: bool,
 ) -> None:
     """Capture a memory entry."""
     project = project or _get_project()
     engine = MemoryEngine()
 
     session_id = os.environ.get("AGENTMEMORY_SESSION", str(uuid.uuid4())[:8])
+
+    if auto_tag and not tags:
+        from .llm_features import auto_tag_memory
+
+        generated = auto_tag_memory(content)
+        if generated:
+            tags = ",".join(generated)
 
     entry = MemoryEntry(
         project=project,
@@ -116,8 +125,10 @@ def capture(
         tags=tags,
     )
     memory_id = engine.store(entry)
+    tag_info = f" [dim](tags: {tags})[/dim]" if tags else ""
     console.print(
-        f"[green][OK][/green] Captured memory [bold]#{memory_id}[/bold] in [bold]{project}[/bold]"
+        f"[green][OK][/green] Captured memory [bold]#{memory_id}[/bold]"
+        f" in [bold]{project}[/bold]{tag_info}"
     )
 
 
@@ -431,17 +442,28 @@ def related(query: str, project: str | None, limit: int, backend: str) -> None:
 @click.option("--project", "-p", help="Project name")
 @click.option("--session", "-s", help="Session ID to summarize")
 @click.option("--output", "-o", type=click.Path(), help="Output file")
-def summarize(project: str | None, session: str | None, output: str | None) -> None:
+@click.option("--llm", is_flag=True, help="Use LLM for richer summary")
+def summarize(project: str | None, session: str | None, output: str | None, llm: bool) -> None:
     """Summarize memories (session or entire project)."""
     project = project or _get_project()
     engine = MemoryEngine()
 
-    if session:
-        text = summarize_session(engine, session, project)
-        title = f"Session: {session}"
+    if llm:
+        from .llm_features import summarize_project_llm, summarize_session_llm
+
+        if session:
+            text = summarize_session_llm(engine, session, project)
+            title = f"Session: {session}"
+        else:
+            text = summarize_project_llm(engine, project)
+            title = f"Project: {project}"
     else:
-        text = summarize_project(engine, project)
-        title = f"Project: {project}"
+        if session:
+            text = summarize_session(engine, session, project)
+            title = f"Session: {session}"
+        else:
+            text = summarize_project(engine, project)
+            title = f"Project: {project}"
 
     if output:
         Path(output).write_text(text, encoding="utf-8")
@@ -644,6 +666,73 @@ def graph(project: str | None, backend: str, output: str | None) -> None:
             console.print("\nTop connections:")
             for edge in sorted(data["edges"], key=lambda e: e["weight"], reverse=True)[:10]:
                 console.print(f"  #{edge['source']} ↔ #{edge['target']} (weight: {edge['weight']})")
+
+
+@main.command()
+@click.option("--project", "-p", help="Project name")
+@click.option("--output", "-o", type=click.Path(), help="Output file")
+@click.option("--llm", is_flag=True, help="Use LLM for richer digest")
+def digest(project: str | None, output: str | None, llm: bool) -> None:
+    """Generate weekly digest of memories."""
+    from .llm_features import generate_weekly_digest
+    from .summarize import summarize_project
+
+    project = project or _get_project()
+    engine = MemoryEngine()
+
+    if llm:
+        text = generate_weekly_digest(engine, project=project)
+    else:
+        text = summarize_project(engine, project)
+
+    if output:
+        Path(output).write_text(text, encoding="utf-8")
+        console.print(f"[green][OK][/green] Digest written to {output}")
+    else:
+        console.print(f"\n[bold cyan]--- Weekly Digest — {project} ---[/bold cyan]\n")
+        console.print(text)
+
+
+@main.command("check-conflicts")
+@click.option("--project", "-p", help="Project name")
+def check_conflicts(project: str | None) -> None:
+    """Detect contradictory memories."""
+    from .llm_features import detect_conflicts
+
+    project = project or _get_project()
+    engine = MemoryEngine()
+    conflicts = detect_conflicts(engine, project)
+
+    if not conflicts:
+        console.print(f"[green][OK][/green] No contradictions found in '{project}'")
+        return
+
+    console.print(f"[yellow]Found {len(conflicts)} potential contradiction(s):[/yellow]\n")
+    table = Table(title=f"Contradictions — {project}")
+    table.add_column("Memory A", style="dim", width=6)
+    table.add_column("Memory B", style="dim", width=6)
+    table.add_column("Reason")
+
+    for c in conflicts:
+        table.add_row(str(c["a"]), str(c["b"]), c["reason"])
+
+    console.print(table)
+
+
+@main.command()
+@click.option("--host", default="127.0.0.1", help="Host to bind")
+@click.option("--port", default=8746, help="Port to bind")
+def server(host: str, port: int) -> None:
+    """Start the AgentMemory REST API server."""
+    try:
+        from .server import run_server
+    except ImportError as e:
+        console.print(f"[red][ERROR][/red] {e}")
+        console.print("[dim]Install with: pip install fastapi uvicorn[/dim]")
+        raise click.Exit(1)
+    console.print(f"[green][OK][/green] Starting REST API at http://{host}:{port}")
+    console.print("[dim]Endpoints: /api/memories, /api/search, /api/summarize, /api/digest[/dim]")
+    run_server(host=host, port=port)
 
 
 if __name__ == "__main__":
