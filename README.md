@@ -1,10 +1,10 @@
-# AgentMemory 🧠
+# Memagent 🧠
 
 > **Open-source cross-agent memory layer for AI coding agents.**
 
 Your AI agent should remember what you built yesterday, why you rejected that approach last week, and that you prefer `async/await` over callbacks.
 
-**AgentMemory makes that happen.**
+**Memagent makes that happen.**
 
 [![CI](https://github.com/Vish150988/agentmemory/actions/workflows/ci.yml/badge.svg)](https://github.com/Vish150988/agentmemory/actions)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
@@ -16,7 +16,7 @@ Your AI agent should remember what you built yesterday, why you rejected that ap
 
 Every time you start a new session with Claude Code, Codex, or Cursor, your agent remembers **nothing**. You re-explain your codebase. You re-teach your preferences. You burn tokens and patience.
 
-**AgentMemory fixes session amnesia.**
+**Memagent fixes session amnesia.**
 
 ---
 
@@ -33,13 +33,13 @@ Every time you start a new session with Claude Code, Codex, or Cursor, your agen
 | **CLAUDE.md sync** | ✅ | Auto-generates `CLAUDE.md` from memory. Claude Code reads it automatically. |
 | **Git hooks** | ✅ | Auto-sync `CLAUDE.md` on every commit. |
 | **Auto-capture** | ✅ | Capture from git log, shell history, and Claude sessions automatically. |
-| **Team sync** | ✅ | Share memories via `.agent-memory/` folder in your repo. |
-| **MCP server** | ✅ | Expose AgentMemory as an MCP server for Cursor/Copilot/Claude. |
+| **Team sync** | ✅ | Share memories via `.memagent/` folder in your repo. |
+| **MCP server** | ✅ | Expose Memagent as an MCP server for Cursor/Copilot/Claude. |
 | **Web dashboard** | ✅ | Browse, search, and manage memories in a local web UI. |
 | **Shell integration** | ✅ | Auto-inject context into Claude Code via shell aliases. |
 | **Background daemon** | ✅ | Silent auto-capture while you work. |
 | **Memory graph** | ✅ | Visualize relationships between memories. |
-| **Mem0 importer** | ✅ | Migrate from Mem0 to AgentMemory. |
+| **Mem0 importer** | ✅ | Migrate from Mem0 to Memagent. |
 | **Social sharing** | ✅ | Auto-post milestones to Twitter/LinkedIn. |
 | **VS Code extension** | ✅ | Capture memories directly from your editor. |
 | **LLM summarization** | ✅ | GPT/Claude-powered project & session summaries. |
@@ -47,7 +47,7 @@ Every time you start a new session with Claude Code, Codex, or Cursor, your agen
 | **Conflict detection** | ✅ | Detect contradictory memories automatically. |
 | **REST API** | ✅ | Full HTTP API for any integration. |
 | **Backup & restore** | ✅ | Export/import memories, projects, and embeddings as `.zip` or `.json`. |
-| **Config file** | ✅ | `~/.agent-memory/config.yaml` for persistent backend and LLM settings. |
+| **Config file** | ✅ | `~/.memagent/config.yaml` for persistent backend and LLM settings. |
 | **FTS5 search** | ✅ | Ranked full-text search with SQLite FTS5 (falls back to LIKE). |
 
 ---
@@ -55,11 +55,11 @@ Every time you start a new session with Claude Code, Codex, or Cursor, your agen
 ## Install
 
 ```bash
-pip install agentmemory
+pip install memagent
 # or
-pipx install agentmemory
+pipx install memagent
 # or
-uv tool install agentmemory
+uv tool install memagent
 ```
 
 ---
@@ -70,23 +70,23 @@ uv tool install agentmemory
 
 ```bash
 cd my-project
-agentmemory init
+memagent init
 ```
 
 ### 2. Capture memories as you work
 
 ```bash
-agentmemory capture "Chose PostgreSQL over MongoDB for ACID compliance" --category decision --confidence 0.95
+memagent capture "Chose PostgreSQL over MongoDB for ACID compliance" --category decision --confidence 0.95
 
-agentmemory capture "Always use async/await, never callbacks" --category preference
+memagent capture "Always use async/await, never callbacks" --category preference
 
-agentmemory capture "Auth bug: JWT refresh tokens not rotating" --category error
+memagent capture "Auth bug: JWT refresh tokens not rotating" --category error
 ```
 
 ### 3. Find related memories (semantic search)
 
 ```bash
-agentmemory related "authentication flow"
+memagent related "authentication flow"
 ```
 
 Output:
@@ -101,13 +101,13 @@ Output:
 ### 4. Summarize your project
 
 ```bash
-agentmemory summarize
+memagent summarize
 ```
 
 ### 5. Sync to CLAUDE.md
 
 ```bash
-agentmemory sync
+memagent sync
 ```
 
 This generates `CLAUDE.md` in your project root. **Claude Code reads it automatically** on startup.
@@ -115,7 +115,7 @@ This generates `CLAUDE.md` in your project root. **Claude Code reads it automati
 ### 6. Install git hooks (auto-sync on commit)
 
 ```bash
-agentmemory hook install
+memagent hook install
 ```
 
 Now `CLAUDE.md` updates automatically every time you commit.
@@ -126,71 +126,71 @@ Now `CLAUDE.md` updates automatically every time you commit.
 
 ```bash
 # Core memory operations
-agentmemory init                          # Initialize memory for project
-agentmemory capture "content"             # Store a memory
-agentmemory capture "..." --auto-tag      # Auto-generate tags with LLM
-agentmemory recall                        # List recent memories
-agentmemory search "keyword"              # Keyword search
-agentmemory related "query"               # Semantic search
-agentmemory summarize                     # Auto-summarize project
-agentmemory summarize --llm               # LLM-powered rich summary
-agentmemory summarize --session ID        # Summarize one session
-agentmemory digest                        # Weekly digest
-agentmemory digest --llm                  # LLM-powered weekly digest
-agentmemory check-conflicts               # Detect contradictory memories
-agentmemory reinforce <id>                # Boost memory confidence
-agentmemory decay                         # Apply confidence decay
-agentmemory decay --dry-run               # Preview decay
+memagent init                          # Initialize memory for project
+memagent capture "content"             # Store a memory
+memagent capture "..." --auto-tag      # Auto-generate tags with LLM
+memagent recall                        # List recent memories
+memagent search "keyword"              # Keyword search
+memagent related "query"               # Semantic search
+memagent summarize                     # Auto-summarize project
+memagent summarize --llm               # LLM-powered rich summary
+memagent summarize --session ID        # Summarize one session
+memagent digest                        # Weekly digest
+memagent digest --llm                  # LLM-powered weekly digest
+memagent check-conflicts               # Detect contradictory memories
+memagent reinforce <id>                # Boost memory confidence
+memagent decay                         # Apply confidence decay
+memagent decay --dry-run               # Preview decay
 
 # Auto-capture
-agentmemory capture-auto                  # Auto-capture from git + shell + Claude
-agentmemory capture-auto --dry-run        # Preview what would be captured
-agentmemory capture-auto --sources git    # Only capture from git log
+memagent capture-auto                  # Auto-capture from git + shell + Claude
+memagent capture-auto --dry-run        # Preview what would be captured
+memagent capture-auto --sources git    # Only capture from git log
 
 # Agent integration
-agentmemory load                          # Generate context brief
-agentmemory sync                          # Sync to CLAUDE.md
-agentmemory export                        # Export to markdown
+memagent load                          # Generate context brief
+memagent sync                          # Sync to CLAUDE.md
+memagent export                        # Export to markdown
 
 # Team sync
-agentmemory team export                   # Export memories to .agent-memory/
-agentmemory team import                   # Import team-shared memories
-agentmemory team status                   # Show team sync status
+memagent team export                   # Export memories to .memagent/
+memagent team import                   # Import team-shared memories
+memagent team status                   # Show team sync status
 
 # Shell integration
-agentmemory shell show                    # Show shell integration script
+memagent shell show                    # Show shell integration script
 
 # Background daemon
-agentmemory daemon start                  # Start silent auto-capture
-agentmemory daemon status                 # Check daemon status
+memagent daemon start                  # Start silent auto-capture
+memagent daemon status                 # Check daemon status
 
 # Import & migration
-agentmemory import <path> --format mem0   # Import from Mem0
-agentmemory import <path> --format markdown
-agentmemory import <path> --format json
+memagent import <path> --format mem0   # Import from Mem0
+memagent import <path> --format markdown
+memagent import <path> --format json
 
 # Social sharing
-agentmemory post "Milestone!"             # Post to Twitter/LinkedIn
+memagent post "Milestone!"             # Post to Twitter/LinkedIn
 
 # Memory graph
-agentmemory graph                         # Build relationship graph
+memagent graph                         # Build relationship graph
 
 # MCP server & dashboard & API
-agentmemory mcp                           # Start MCP server (stdio)
-agentmemory dashboard                     # Start web dashboard on :8745
-agentmemory server                        # Start REST API on :8746
+memagent mcp                           # Start MCP server (stdio)
+memagent dashboard                     # Start web dashboard on :8745
+memagent server                        # Start REST API on :8746
 
 # Backup & restore
-agentmemory backup                        # Create dated .zip backup
-agentmemory backup -p my-project          # Backup single project
-agentmemory restore backup.zip            # Restore from backup
-agentmemory restore backup.zip --dry-run  # Preview restore
+memagent backup                        # Create dated .zip backup
+memagent backup -p my-project          # Backup single project
+memagent restore backup.zip            # Restore from backup
+memagent restore backup.zip --dry-run  # Preview restore
 
 # Management
-agentmemory stats                         # Show statistics
-agentmemory hook install                  # Install git hooks
-agentmemory hook uninstall                # Remove git hooks
-agentmemory delete <project>              # Wipe project memory
+memagent stats                         # Show statistics
+memagent hook install                  # Install git hooks
+memagent hook uninstall                # Remove git hooks
+memagent delete <project>              # Wipe project memory
 ```
 
 ---
@@ -200,21 +200,21 @@ agentmemory delete <project>              # Wipe project memory
 ```
 Your Terminal Agent
        │
-       ├──► agentmemory capture "..."   ──► SQLite (~/.agent-memory/memory.db)
+       ├──► memagent capture "..."   ──► SQLite (~/.memagent/memory.db)
        │
-       ├──► agentmemory capture-auto    ──► Auto-import from git / shell / Claude
+       ├──► memagent capture-auto    ──► Auto-import from git / shell / Claude
        │
-       ├──► agentmemory related "..."   ──► TF-IDF + Cosine Similarity (numpy)
+       ├──► memagent related "..."   ──► TF-IDF + Cosine Similarity (numpy)
        │
-       ├──► agentmemory load            ──► Markdown brief for agent context
+       ├──► memagent load            ──► Markdown brief for agent context
        │
-       ├──► agentmemory sync            ──► CLAUDE.md (auto-read by Claude Code)
+       ├──► memagent sync            ──► CLAUDE.md (auto-read by Claude Code)
        │
-       ├──► agentmemory team export     ──► .agent-memory/ (git-shared)
+       ├──► memagent team export     ──► .memagent/ (git-shared)
        │
-       ├──► agentmemory mcp             ──► MCP server for Cursor/Copilot/Claude
+       ├──► memagent mcp             ──► MCP server for Cursor/Copilot/Claude
        │
-       └──► agentmemory dashboard       ──► Web UI on http://localhost:8745
+       └──► memagent dashboard       ──► Web UI on http://localhost:8745
 ```
 
 **Storage:** Plain SQLite. Query it with any tool. Back it up. Version it.
@@ -239,9 +239,9 @@ Your Terminal Agent
 
 ## Why Not Just Use CLAUDE.md?
 
-`CLAUDE.md` is static documentation. AgentMemory is **learned memory**:
+`CLAUDE.md` is static documentation. Memagent is **learned memory**:
 
-| CLAUDE.md | AgentMemory |
+| CLAUDE.md | Memagent |
 |-----------|-------------|
 | You write it manually | Captured as you work |
 | Same every session | Grows and evolves |
@@ -249,13 +249,13 @@ Your Terminal Agent
 | One file per project | Searchable across all history |
 | No semantic search | Find related ideas by meaning |
 
-**Use both.** `CLAUDE.md` for stable conventions. AgentMemory for dynamic context.
+**Use both.** `CLAUDE.md` for stable conventions. Memagent for dynamic context.
 
 ---
 
 ## Storage Backends
 
-AgentMemory supports multiple storage backends. **SQLite is the default** — zero config, works offline, perfect for individuals.
+Memagent supports multiple storage backends. **SQLite is the default** — zero config, works offline, perfect for individuals.
 
 **PostgreSQL** is available for teams, concurrent access, and larger deployments.
 
@@ -263,31 +263,31 @@ AgentMemory supports multiple storage backends. **SQLite is the default** — ze
 
 ```bash
 # No configuration needed — works out of the box
-agentmemory init
+memagent init
 ```
 
-Database file: `~/.agent-memory/memory.db`
+Database file: `~/.memagent/memory.db`
 
 ### PostgreSQL
 
 ```bash
 # 1. Install with PostgreSQL support
-pip install agentmemory[postgres]
+pip install memagent[postgres]
 
 # 2. Start PostgreSQL (Docker Compose included)
 docker compose up -d
 
 # 3. Set the connection URL
-export DATABASE_URL=postgresql://agentmemory:agentmemory@localhost:5432/agentmemory
+export DATABASE_URL=postgresql://memagent:memagent@localhost:5432/memagent
 
 # 4. Initialize
-agentmemory init
+memagent init
 ```
 
 ### Switching Backends
 
 ```python
-from agentmemory import MemoryEngine
+from memagent import MemoryEngine
 
 # Auto-detect: uses Postgres if DATABASE_URL is set, otherwise SQLite
 engine = MemoryEngine()
@@ -303,13 +303,13 @@ engine = MemoryEngine(backend="postgres")
 
 ```bash
 # Migrate all memories from SQLite to PostgreSQL
-agentmemory migrate --from-backend sqlite --to-backend postgres
+memagent migrate --from-backend sqlite --to-backend postgres
 
 # Migrate a single project
-agentmemory migrate -p my-project --from-backend sqlite --to-backend postgres
+memagent migrate -p my-project --from-backend sqlite --to-backend postgres
 
 # Specify custom source DB or target DSN
-agentmemory migrate --from-db-path ./old.db --to-dsn postgresql://user:pass@host/db
+memagent migrate --from-db-path ./old.db --to-dsn postgresql://user:pass@host/db
 ```
 
 ---
@@ -348,7 +348,7 @@ PRs welcome! This is a community project.
 
 ```bash
 git clone https://github.com/Vish150988/agentmemory.git
-cd agentmemory
+cd memagent
 pip install -e ".[dev]"
 pytest tests/ -v
 ```

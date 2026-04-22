@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from agentmemory.core import MemoryEngine, MemoryEntry
-from agentmemory.llm_features import (
+from memagent.core import MemoryEngine, MemoryEntry
+from memagent.llm_features import (
     auto_tag_memory,
     detect_conflicts,
     generate_weekly_digest,

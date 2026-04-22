@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from agentmemory import MemoryEngine, MemoryEntry
-from agentmemory.backup import create_backup, restore_backup
+from memagent import MemoryEngine, MemoryEntry
+from memagent.backup import create_backup, restore_backup
 
 
 class TestBackup:

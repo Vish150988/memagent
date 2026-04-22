@@ -1,6 +1,6 @@
-"""MCP (Model Context Protocol) server for AgentMemory.
+"""MCP (Model Context Protocol) server for Memagent.
 
-Exposes AgentMemory as tools that any MCP-compatible agent can call.
+Exposes Memagent as tools that any MCP-compatible agent can call.
 Requires: pip install fastmcp
 """
 
@@ -21,9 +21,9 @@ except ImportError as e:
     ) from e
 
 mcp = FastMCP(
-    "agentmemory",
+    "memagent",
     instructions=(
-        "AgentMemory MCP server — tools for persistent cross-agent memory. "
+        "memagent mcp server — tools for persistent cross-agent memory. "
         "Use memory_recall to get context, memory_search to find specifics, "
         "memory_capture to store decisions, and memory_summarize for overviews."
     ),
@@ -117,7 +117,7 @@ def memory_capture(
     import os
     import uuid
 
-    session_id = os.environ.get("AGENTMEMORY_SESSION", str(uuid.uuid4())[:8])
+    session_id = os.environ.get("MEMAGENT_SESSION", str(uuid.uuid4())[:8])
     entry = MemoryEntry(
         project=project,
         session_id=session_id,

@@ -8,7 +8,7 @@ pytest.importorskip("fastapi")
 
 from fastapi.testclient import TestClient
 
-from agentmemory.dashboard import app
+from memagent.dashboard import app
 
 
 @pytest.fixture
@@ -20,7 +20,7 @@ def test_index_returns_html(client: TestClient) -> None:
     response = client.get("/")
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
-    assert "AgentMemory Dashboard" in response.text
+    assert "memagent dashboard" in response.text
 
 
 def test_api_stats_structure(client: TestClient) -> None:

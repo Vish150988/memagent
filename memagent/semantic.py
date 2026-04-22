@@ -3,7 +3,7 @@
 Backends:
 - tfidf: Pure numpy TF-IDF + cosine similarity (default, no extra deps)
 - sentence-transformers: Dense embeddings via sentence-transformers
-  (install with: pip install agentmemory[embeddings])
+  (install with: pip install memagent[embeddings])
 """
 
 from __future__ import annotations
@@ -309,7 +309,7 @@ class SemanticIndex:
             except ImportError as exc:
                 raise RuntimeError(
                     "sentence-transformers not installed. "
-                    "Run: pip install agentmemory[embeddings]"
+                    "Run: pip install memagent[embeddings]"
                 ) from exc
 
         # Auto: prefer ST if available, else TF-IDF

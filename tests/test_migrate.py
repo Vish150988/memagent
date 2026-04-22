@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from agentmemory import MemoryEngine, MemoryEntry
+from memagent import MemoryEngine, MemoryEntry
 
 
 class TestMigrate:

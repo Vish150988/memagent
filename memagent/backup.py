@@ -1,4 +1,4 @@
-"""Backup and restore for AgentMemory.
+"""Backup and restore for Memagent.
 
 Formats:
   - .zip  (default): memories.json + projects.json + embeddings.json + meta.json

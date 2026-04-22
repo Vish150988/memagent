@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from agentmemory.llm import LLMClient, get_llm_client
+from memagent.llm import LLMClient, get_llm_client
 
 
 def test_llm_client_without_keys() -> None:

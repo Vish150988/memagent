@@ -1,19 +1,19 @@
-# AgentMemory Launch Kit
+# Memagent Launch Kit
 
 ## Twitter/X Post
 
 ```
-🚀 Just shipped AgentMemory — open-source memory for AI coding agents.
+🚀 Just shipped Memagent — open-source memory for AI coding agents.
 
 Tired of re-explaining your codebase to Claude Code every session?
 
-AgentMemory fixes that:
+Memagent fixes that:
 • Capture decisions, preferences, errors
 • Semantic search (no heavy deps, pure numpy)
 • Auto-generates CLAUDE.md
 • Confidence decay — old memories fade, important ones stick
 
-pip install agentmemory
+pip install memagent
 
 https://github.com/Vish150988/agentmemory
 
@@ -26,7 +26,7 @@ https://github.com/Vish150988/agentmemory
 
 **Body:**
 ```
-Every time I start a new Claude Code session, I have to re-explain my codebase. So I built AgentMemory — a local, open-source memory system that persists across sessions.
+Every time I start a new Claude Code session, I have to re-explain my codebase. So I built Memagent — a local, open-source memory system that persists across sessions.
 
 What it does:
 - Stores decisions, preferences, errors, facts in SQLite
@@ -43,11 +43,11 @@ Would love feedback from anyone using AI agents for coding!
 
 ## Hacker News Post
 
-**Title:** Show HN: AgentMemory – Open-source memory layer for AI coding agents
+**Title:** Show HN: Memagent – Open-source memory layer for AI coding agents
 
 **Body:**
 ```
-I built AgentMemory because I was tired of Claude Code forgetting everything between sessions.
+I built Memagent because I was tired of Claude Code forgetting everything between sessions.
 
 It's a local-first, cross-agent memory system:
 - SQLite storage (private, fast, portable)
@@ -63,11 +63,11 @@ Code: https://github.com/Vish150988/agentmemory
 ## LinkedIn Post
 
 ```
-I just open-sourced AgentMemory — a memory layer for AI coding agents.
+I just open-sourced Memagent — a memory layer for AI coding agents.
 
 If you use Claude Code, Codex, or Cursor, you know the pain: every session starts from zero. You re-explain your architecture. You re-teach your conventions. You burn tokens and time.
 
-AgentMemory solves this with:
+Memagent solves this with:
 ✅ Local SQLite storage — your data never leaves your machine
 ✅ Semantic search — find memories by meaning, not keywords
 ✅ Auto-generated CLAUDE.md — Claude Code reads it automatically

@@ -1,20 +1,20 @@
 services:
   postgres:
     image: pgvector/pgvector:pg17
-    container_name: agentmemory-postgres
+    container_name: memagent-postgres
     environment:
-      POSTGRES_USER: agentmemory
-      POSTGRES_PASSWORD: agentmemory
-      POSTGRES_DB: agentmemory
+      POSTGRES_USER: memagent
+      POSTGRES_PASSWORD: memagent
+      POSTGRES_DB: memagent
     ports:
       - "5432:5432"
     volumes:
-      - agentmemory_pgdata:/var/lib/postgresql/data
+      - MEMAGENT_pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U agentmemory"]
+      test: ["CMD-SHELL", "pg_isready -U memagent"]
       interval: 5s
       timeout: 5s
       retries: 5
 
 volumes:
-  agentmemory_pgdata:
+  MEMAGENT_pgdata:

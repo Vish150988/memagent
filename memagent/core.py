@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
-DEFAULT_MEMORY_DIR = Path.home() / ".agent-memory"
+DEFAULT_MEMORY_DIR = Path.home() / ".memagent"
 DEFAULT_DB_PATH = DEFAULT_MEMORY_DIR / "memory.db"
 
 

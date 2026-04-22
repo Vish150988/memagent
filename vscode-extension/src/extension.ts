@@ -5,7 +5,7 @@ import { promisify } from 'util';
 const execAsync = promisify(exec);
 
 function getProjectName(): string {
-    const config = vscode.workspace.getConfiguration('agentmemory');
+    const config = vscode.workspace.getConfiguration('memagent');
     const configured = config.get<string>('project');
     if (configured && configured.trim()) {
         return configured;
@@ -17,15 +17,15 @@ function getProjectName(): string {
     return 'default';
 }
 
-async function runAgentMemory(args: string[]): Promise<string> {
+async function runMemagent(args: string[]): Promise<string> {
     const project = getProjectName();
-    const cmd = `agentmemory ${args.join(' ')} --project "${project}"`;
+    const cmd = `memagent ${args.join(' ')} --project "${project}"`;
     try {
         const { stdout } = await execAsync(cmd);
         return stdout;
     } catch (err: any) {
         // Fallback to python module path
-        const fallback = `python -m agentmemory.cli ${args.join(' ')} --project "${project}"`;
+        const fallback = `python -m memagent.cli ${args.join(' ')} --project "${project}"`;
         const { stdout } = await execAsync(fallback);
         return stdout;
     }
@@ -33,7 +33,7 @@ async function runAgentMemory(args: string[]): Promise<string> {
 
 export function activate(context: vscode.ExtensionContext) {
     // Capture memory
-    const capture = vscode.commands.registerCommand('agentmemory.capture', async () => {
+    const capture = vscode.commands.registerCommand('memagent.capture', async () => {
         const editor = vscode.window.activeTextEditor;
         let defaultText = '';
         if (editor && !editor.selection.isEmpty) {
@@ -54,7 +54,7 @@ export function activate(context: vscode.ExtensionContext) {
         if (!category) { return; }
 
         try {
-            const result = await runAgentMemory(['capture', content, '--category', category]);
+            const result = await runMemagent(['capture', content, '--category', category]);
             vscode.window.showInformationMessage(`Memory captured: ${result.trim()}`);
         } catch (err: any) {
             vscode.window.showErrorMessage(`Capture failed: ${err.message}`);
@@ -62,12 +62,12 @@ export function activate(context: vscode.ExtensionContext) {
     });
 
     // Recall memories
-    const recall = vscode.commands.registerCommand('agentmemory.recall', async () => {
+    const recall = vscode.commands.registerCommand('memagent.recall', async () => {
         try {
-            const result = await runAgentMemory(['recall']);
+            const result = await runMemagent(['recall']);
             const panel = vscode.window.createWebviewPanel(
-                'agentmemoryRecall',
-                'AgentMemory — Recall',
+                'memagentRecall',
+                'Memagent — Recall',
                 vscode.ViewColumn.One,
                 {}
             );
@@ -78,7 +78,7 @@ export function activate(context: vscode.ExtensionContext) {
     });
 
     // Search memories
-    const search = vscode.commands.registerCommand('agentmemory.search', async () => {
+    const search = vscode.commands.registerCommand('memagent.search', async () => {
         const keyword = await vscode.window.showInputBox({
             prompt: 'Search memories',
             placeHolder: 'Keyword...'
@@ -86,7 +86,7 @@ export function activate(context: vscode.ExtensionContext) {
         if (!keyword) { return; }
 
         try {
-            const result = await runAgentMemory(['search', keyword]);
+            const result = await runMemagent(['search', keyword]);
             vscode.window.showInformationMessage(result.trim());
         } catch (err: any) {
             vscode.window.showErrorMessage(`Search failed: ${err.message}`);
@@ -94,9 +94,9 @@ export function activate(context: vscode.ExtensionContext) {
     });
 
     // Load context brief
-    const load = vscode.commands.registerCommand('agentmemory.load', async () => {
+    const load = vscode.commands.registerCommand('memagent.load', async () => {
         try {
-            const result = await runAgentMemory(['load']);
+            const result = await runMemagent(['load']);
             await vscode.env.clipboard.writeText(result);
             vscode.window.showInformationMessage('Context brief copied to clipboard! Paste into your agent.');
         } catch (err: any) {
@@ -105,9 +105,9 @@ export function activate(context: vscode.ExtensionContext) {
     });
 
     // Sync CLAUDE.md
-    const sync = vscode.commands.registerCommand('agentmemory.sync', async () => {
+    const sync = vscode.commands.registerCommand('memagent.sync', async () => {
         try {
-            const result = await runAgentMemory(['sync']);
+            const result = await runMemagent(['sync']);
             vscode.window.showInformationMessage(`Synced: ${result.trim()}`);
         } catch (err: any) {
             vscode.window.showErrorMessage(`Sync failed: ${err.message}`);
@@ -116,7 +116,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Auto-capture on save (if enabled)
     const saveListener = vscode.workspace.onDidSaveTextDocument(async (doc) => {
-        const config = vscode.workspace.getConfiguration('agentmemory');
+        const config = vscode.workspace.getConfiguration('memagent');
         if (!config.get<boolean>('autoCapture')) { return; }
 
         const relative = vscode.workspace.asRelativePath(doc.uri);
@@ -125,7 +125,7 @@ export function activate(context: vscode.ExtensionContext) {
         }
 
         try {
-            await runAgentMemory(['capture', `Edited ${relative}`, '--category', 'action', '--tags', 'vscode,auto']);
+            await runMemagent(['capture', `Edited ${relative}`, '--category', 'action', '--tags', 'vscode,auto']);
         } catch {
             // Silent fail for auto-capture
         }

@@ -1,8 +1,8 @@
-"""PostgreSQL storage backend for AgentMemory.
+"""PostgreSQL storage backend for Memagent.
 
 Requires: pip install psycopg  (or psycopg2)
 Configure via DATABASE_URL env var, e.g.:
-  DATABASE_URL=postgresql://user:pass@localhost/agentmemory
+  DATABASE_URL=postgresql://user:pass@localhost/memagent
 """
 
 from __future__ import annotations
@@ -35,11 +35,11 @@ class PostgresBackend(MemoryBackend):
         if not _HAS_PSYCOG:
             raise ImportError(
                 "PostgreSQL backend requires psycopg. "
-                "Install with: pip install agentmemory[postgres]"
+                "Install with: pip install memagent[postgres]"
             )
         self.dsn = dsn or os.environ.get(
             "DATABASE_URL",
-            "postgresql://localhost/agentmemory",
+            "postgresql://localhost/memagent",
         )
         self._conn = None
 

@@ -1,9 +1,9 @@
 {
-  "name": "agentmemory",
-  "displayName": "AgentMemory",
+  "name": "memagent",
+  "displayName": "Memagent",
   "description": "Capture and recall AI agent memories directly from VS Code",
   "version": "0.2.0",
-  "publisher": "agentmemory",
+  "publisher": "memagent",
   "engines": {
     "vscode": "^1.80.0"
   },
@@ -21,63 +21,63 @@
     "copilot"
   ],
   "activationEvents": [
-    "onCommand:agentmemory.capture",
-    "onCommand:agentmemory.recall",
-    "onCommand:agentmemory.search",
-    "onCommand:agentmemory.load"
+    "onCommand:memagent.capture",
+    "onCommand:memagent.recall",
+    "onCommand:memagent.search",
+    "onCommand:memagent.load"
   ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
       {
-        "command": "agentmemory.capture",
+        "command": "memagent.capture",
         "title": "Capture Memory",
-        "category": "AgentMemory",
+        "category": "Memagent",
         "icon": "$(add)"
       },
       {
-        "command": "agentmemory.recall",
+        "command": "memagent.recall",
         "title": "Recall Memories",
-        "category": "AgentMemory",
+        "category": "Memagent",
         "icon": "$(history)"
       },
       {
-        "command": "agentmemory.search",
+        "command": "memagent.search",
         "title": "Search Memories",
-        "category": "AgentMemory",
+        "category": "Memagent",
         "icon": "$(search)"
       },
       {
-        "command": "agentmemory.load",
+        "command": "memagent.load",
         "title": "Load Context Brief",
-        "category": "AgentMemory",
+        "category": "Memagent",
         "icon": "$(file-code)"
       },
       {
-        "command": "agentmemory.sync",
+        "command": "memagent.sync",
         "title": "Sync CLAUDE.md",
-        "category": "AgentMemory",
+        "category": "Memagent",
         "icon": "$(sync)"
       }
     ],
     "menus": {
       "editor/context": [
         {
-          "command": "agentmemory.capture",
-          "group": "agentmemory@1",
+          "command": "memagent.capture",
+          "group": "memagent@1",
           "when": "editorHasSelection"
         }
       ]
     },
     "configuration": {
-      "title": "AgentMemory",
+      "title": "memagent",
       "properties": {
-        "agentmemory.project": {
+        "memagent.project": {
           "type": "string",
           "default": "",
           "description": "Project name (auto-detected if empty)"
         },
-        "agentmemory.autoCapture": {
+        "memagent.autoCapture": {
           "type": "boolean",
           "default": false,
           "description": "Auto-capture on file save"

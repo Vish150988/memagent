@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from .core import MemoryEngine
 
-MEMORY_TEMPLATE = """# AgentMemory Export — {project}
+MEMORY_TEMPLATE = """# memagent export — {project}
 
 ## Statistics
 - Total memories: {total}

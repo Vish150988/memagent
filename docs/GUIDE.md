@@ -1,4 +1,4 @@
-# AgentMemory Complete User Guide
+# Memagent Complete User Guide
 
 > **Version:** 0.2.0  
 > **GitHub:** https://github.com/Vish150988/agentmemory
@@ -27,37 +27,37 @@
 ### Basic Install
 
 ```bash
-pip install agentmemory
+pip install memagent
 ```
 
 ### With All Features
 
 ```bash
-pip install agentmemory[all]
+pip install memagent[all]
 ```
 
 ### Selective Features
 
 ```bash
-pip install agentmemory[embeddings]   # Better semantic search
-pip install agentmemory[mcp]          # MCP server for Cursor/Copilot
-pip install agentmemory[dashboard]    # Web UI
+pip install memagent[embeddings]   # Better semantic search
+pip install memagent[mcp]          # MCP server for Cursor/Copilot
+pip install memagent[dashboard]    # Web UI
 ```
 
 ### Verify Install
 
 ```bash
-agentmemory --version
-# agentmemory, version 0.2.0
+memagent --version
+# memagent, version 0.2.0
 ```
 
 ---
 
 ## Core Concepts
 
-### What Is AgentMemory?
+### What Is Memagent?
 
-AgentMemory is a **local-first, cross-agent memory layer** for AI coding assistants. It stores what you learn, decide, and build as structured memories that any agent can read.
+Memagent is a **local-first, cross-agent memory layer** for AI coding assistants. It stores what you learn, decide, and build as structured memories that any agent can read.
 
 ### Key Ideas
 
@@ -71,9 +71,9 @@ AgentMemory is a **local-first, cross-agent memory layer** for AI coding assista
 
 ### Storage
 
-- **Location:** `~/.agent-memory/memory.db` (SQLite)
+- **Location:** `~/.memagent/memory.db` (SQLite)
 - **Privacy:** Nothing leaves your machine
-- **Backup:** Copy the `.db` file or use `agentmemory export`
+- **Backup:** Copy the `.db` file or use `memagent export`
 
 ---
 
@@ -85,10 +85,10 @@ AgentMemory is a **local-first, cross-agent memory layer** for AI coding assista
 cd my-project
 
 # Optional: set a session ID so today's memories group together
-export AGENTMEMORY_SESSION="stripe-integration"
+export MEMAGENT_SESSION="stripe-integration"
 
 # Load context from previous sessions
-agentmemory load
+memagent load
 ```
 
 **Copy the output** and paste it into your AI agent's context window.
@@ -97,39 +97,39 @@ agentmemory load
 
 ```bash
 # Architecture decision
-agentmemory capture "Chose Stripe over PayPal for better API docs" --category decision --confidence 0.9
+memagent capture "Chose Stripe over PayPal for better API docs" --category decision --confidence 0.9
 
 # Coding convention you just established
-agentmemory capture "Use pydantic models for all API inputs" --category preference
+memagent capture "Use pydantic models for all API inputs" --category preference
 
 # Bug you just fixed
-agentmemory capture "Webhook signature verification fails on empty body" --category error
+memagent capture "Webhook signature verification fails on empty body" --category error
 
 # What you just built
-agentmemory capture "Implemented checkout session endpoint" --category action
+memagent capture "Implemented checkout session endpoint" --category action
 ```
 
 ### End Of Day: Auto-Capture Everything
 
 ```bash
 # Preview what would be captured
-agentmemory capture-auto --dry-run
+memagent capture-auto --dry-run
 
 # Actually capture from git log, shell history, and Claude sessions
-agentmemory capture-auto
+memagent capture-auto
 
 # Sync to CLAUDE.md for tomorrow
-agentmemory sync
+memagent sync
 
 # Share with your team
-agentmemory team export
+memagent team export
 ```
 
 ### Commit Your Work
 
 ```bash
 git add .
-git add CLAUDE.md .agent-memory/   # include shared memory
+git add CLAUDE.md .memagent/   # include shared memory
 git commit -m "feat: stripe checkout + shared agent memory"
 ```
 
@@ -140,62 +140,62 @@ git commit -m "feat: stripe checkout + shared agent memory"
 ### Core Commands
 
 ```bash
-agentmemory init                          # Initialize memory for current project
-agentmemory capture "content"             # Store a memory
-agentmemory recall                        # List recent memories
-agentmemory recall --category decision    # Filter by category
-agentmemory recall --limit 50             # Show more
-agentmemory search "keyword"              # Keyword search
-agentmemory related "query"               # Semantic search
-agentmemory summarize                     # Summarize entire project
-agentmemory summarize --session <id>      # Summarize one session
-agentmemory reinforce <id>                # Boost memory confidence
-agentmemory decay                         # Apply confidence decay
-agentmemory decay --dry-run               # Preview without changing
+memagent init                          # Initialize memory for current project
+memagent capture "content"             # Store a memory
+memagent recall                        # List recent memories
+memagent recall --category decision    # Filter by category
+memagent recall --limit 50             # Show more
+memagent search "keyword"              # Keyword search
+memagent related "query"               # Semantic search
+memagent summarize                     # Summarize entire project
+memagent summarize --session <id>      # Summarize one session
+memagent reinforce <id>                # Boost memory confidence
+memagent decay                         # Apply confidence decay
+memagent decay --dry-run               # Preview without changing
 ```
 
 ### Agent Integration
 
 ```bash
-agentmemory load                          # Generate context brief for agents
-agentmemory sync                          # Generate/update CLAUDE.md
-agentmemory export                        # Export to markdown file
+memagent load                          # Generate context brief for agents
+memagent sync                          # Generate/update CLAUDE.md
+memagent export                        # Export to markdown file
 ```
 
 ### Auto-Capture
 
 ```bash
-agentmemory capture-auto                  # Capture from all sources
-agentmemory capture-auto --sources git    # Only git commits
-agentmemory capture-auto --sources shell,git   # Specific sources
-agentmemory capture-auto --dry-run        # Preview only
+memagent capture-auto                  # Capture from all sources
+memagent capture-auto --sources git    # Only git commits
+memagent capture-auto --sources shell,git   # Specific sources
+memagent capture-auto --dry-run        # Preview only
 ```
 
 ### Team Sync
 
 ```bash
-agentmemory team export                   # Export to .agent-memory/
-agentmemory team export --project <name>  # Export specific project
-agentmemory team import                   # Import team memories
-agentmemory team import --dry-run         # Preview imports
-agentmemory team status                   # Show sync state
+memagent team export                   # Export to .memagent/
+memagent team export --project <name>  # Export specific project
+memagent team import                   # Import team memories
+memagent team import --dry-run         # Preview imports
+memagent team status                   # Show sync state
 ```
 
 ### MCP Server & Dashboard
 
 ```bash
-agentmemory mcp                           # Start MCP server (stdio)
-agentmemory dashboard                     # Start web UI on :8745
-agentmemory dashboard --port 8080         # Custom port
+memagent mcp                           # Start MCP server (stdio)
+memagent dashboard                     # Start web UI on :8745
+memagent dashboard --port 8080         # Custom port
 ```
 
 ### Management
 
 ```bash
-agentmemory stats                         # Show statistics
-agentmemory hook install                  # Install git hooks
-agentmemory hook uninstall                # Remove git hooks
-agentmemory delete <project>              # Wipe all memories for project
+memagent stats                         # Show statistics
+memagent hook install                  # Install git hooks
+memagent hook uninstall                # Remove git hooks
+memagent delete <project>              # Wipe all memories for project
 ```
 
 ---
@@ -237,7 +237,7 @@ Auto-capture scans your work history and converts it into memories automatically
 ### Example Output
 
 ```bash
-$ agentmemory capture-auto --dry-run
+$ memagent capture-auto --dry-run
 Dry run — would capture 8 memories:
 
   [action] [git commit] Add Stripe webhook handler
@@ -250,7 +250,7 @@ Dry run — would capture 8 memories:
 ### Capture And Store
 
 ```bash
-$ agentmemory capture-auto
+$ memagent capture-auto
 [OK] Auto-captured 8 memories:
   shell: 2
   git: 5
@@ -268,7 +268,7 @@ Share agent memory across your team via git.
 ```
 You                    Teammate
   |                        |
-  ├── team export ──► .agent-memory/
+  ├── team export ──► .memagent/
   │                        │
   ├── git push ─────► git pull
   │                        │
@@ -281,17 +281,17 @@ You                    Teammate
 
 ```bash
 # You: export and commit
-agentmemory team export
-git add .agent-memory/
+memagent team export
+git add .memagent/
 git commit -m "chore: sync agent memory"
 git push
 
 # Teammate: pull and import
 git pull
-agentmemory team import
+memagent team import
 
 # Check status anytime
-agentmemory team status
+memagent team status
 ```
 
 ### Deduplication
@@ -302,12 +302,12 @@ Team import automatically skips duplicates by content hash. Running `team import
 
 ## MCP Server
 
-Expose AgentMemory as tools to any **MCP-compatible agent** (Cursor, Claude Desktop, Copilot, etc.).
+Expose Memagent as tools to any **MCP-compatible agent** (Cursor, Claude Desktop, Copilot, etc.).
 
 ### Start The Server
 
 ```bash
-agentmemory mcp
+memagent mcp
 ```
 
 Runs over **stdio** — no network configuration needed.
@@ -319,15 +319,15 @@ Add to `~/.cursor/mcp.json`:
 ```json
 {
   "mcpServers": {
-    "agentmemory": {
-      "command": "agentmemory",
+    "memagent": {
+      "command": "memagent",
       "args": ["mcp"]
     }
   }
 }
 ```
 
-Restart Cursor. The AgentMemory tools appear in the MCP panel.
+Restart Cursor. The Memagent tools appear in the MCP panel.
 
 ### Connect To Claude Desktop
 
@@ -336,8 +336,8 @@ Add to `claude_desktop_config.json`:
 ```json
 {
   "mcpServers": {
-    "agentmemory": {
-      "command": "agentmemory",
+    "memagent": {
+      "command": "memagent",
       "args": ["mcp"]
     }
   }
@@ -372,7 +372,7 @@ Browse and manage memories in a browser.
 ### Start
 
 ```bash
-agentmemory dashboard
+memagent dashboard
 # → http://localhost:8745
 ```
 
@@ -405,7 +405,7 @@ Automatically sync `CLAUDE.md` on every commit.
 ### Install
 
 ```bash
-agentmemory hook install
+memagent hook install
 ```
 
 Creates:
@@ -415,14 +415,14 @@ Creates:
 ### What Happens
 
 Every time you commit:
-1. Pre-commit hook runs `agentmemory sync`
+1. Pre-commit hook runs `memagent sync`
 2. `CLAUDE.md` is updated with latest memories
 3. `CLAUDE.md` is auto-added to the commit
 
 ### Uninstall
 
 ```bash
-agentmemory hook uninstall
+memagent hook uninstall
 ```
 
 ---
@@ -432,8 +432,8 @@ agentmemory hook uninstall
 ### Custom Database Location
 
 ```bash
-export AGENTMEMORY_DB=/path/to/custom/memory.db
-agentmemory stats
+export MEMAGENT_DB=/path/to/custom/memory.db
+memagent stats
 ```
 
 ### Session IDs
@@ -441,9 +441,9 @@ agentmemory stats
 Group memories by session:
 
 ```bash
-export AGENTMEMORY_SESSION="refactor-auth-2024"
-agentmemory capture "Split auth into service layer" --category action
-agentmemory capture "Added JWT middleware tests" --category action
+export MEMAGENT_SESSION="refactor-auth-2024"
+memagent capture "Split auth into service layer" --category action
+memagent capture "Added JWT middleware tests" --category action
 ```
 
 ### Tags
@@ -451,41 +451,41 @@ agentmemory capture "Added JWT middleware tests" --category action
 Add searchable tags:
 
 ```bash
-agentmemory capture "Stripe webhook signature bug" --category error --tags "stripe,webhook,security"
-agentmemory search "stripe"   # finds this
-agentmemory search "security" # also finds this
+memagent capture "Stripe webhook signature bug" --category error --tags "stripe,webhook,security"
+memagent search "stripe"   # finds this
+memagent search "security" # also finds this
 ```
 
 ### Semantic Search Backends
 
 ```bash
 # Default: TF-IDF (pure numpy, always works)
-agentmemory related "authentication"
+memagent related "authentication"
 
 # Optional: sentence-transformers (better quality)
 pip install sentence-transformers
-agentmemory related "authentication" --backend sentence-transformers
+memagent related "authentication" --backend sentence-transformers
 ```
 
 ### Backup & Restore
 
 ```bash
 # Export all memories to markdown
-agentmemory export --output backup.md
+memagent export --output backup.md
 
 # The SQLite file itself is portable
-cp ~/.agent-memory/memory.db ~/backups/memory-$(date +%Y%m%d).db
+cp ~/.memagent/memory.db ~/backups/memory-$(date +%Y%m%d).db
 ```
 
 ---
 
 ## Troubleshooting
 
-### `agentmemory: command not found`
+### `memagent: command not found`
 
 ```bash
 # Use Python module path instead
-python -m agentmemory.cli --help
+python -m memagent.cli --help
 
 # Or reinstall with pip
 pip install --force-reinstall -e .
@@ -493,33 +493,33 @@ pip install --force-reinstall -e .
 
 ### Unicode errors on Windows
 
-AgentMemory uses `[OK]` instead of Unicode checkmarks on Windows. If you still see issues:
+Memagent uses `[OK]` instead of Unicode checkmarks on Windows. If you still see issues:
 
 ```bash
 set PYTHONIOENCODING=utf-8
-agentmemory stats
+memagent stats
 ```
 
 ### MCP server not showing in Cursor
 
-1. Verify the server starts: `agentmemory mcp` (should hang, waiting for input)
+1. Verify the server starts: `memagent mcp` (should hang, waiting for input)
 2. Check Cursor's MCP settings JSON is valid
 3. Restart Cursor completely
 
 ### Dashboard port already in use
 
 ```bash
-agentmemory dashboard --port 8080
+memagent dashboard --port 8080
 ```
 
 ### Team import shows 0 memories
 
 ```bash
 # Check you're in the right directory
-agentmemory team status
+memagent team status
 
 # Verify export files exist
-ls .agent-memory/
+ls .memagent/
 ```
 
 ---
@@ -528,10 +528,10 @@ ls .agent-memory/
 
 ```bash
 # 1. Install
-pip install agentmemory[all]
+pip install memagent[all]
 
 # 2. Init
-cd my-project && agentmemory init
+cd my-project && memagent init
 
 # 3. Capture
 capture-auto
@@ -548,7 +548,7 @@ hook install  # auto-sync on commit
 
 # 6. Share
 team export
-git add .agent-memory/ CLAUDE.md && git commit
+git add .memagent/ CLAUDE.md && git commit
 ```
 
 ---

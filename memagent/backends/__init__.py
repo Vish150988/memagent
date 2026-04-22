@@ -1,4 +1,4 @@
-"""Pluggable storage backends for AgentMemory."""
+"""Pluggable storage backends for Memagent."""
 
 from __future__ import annotations
 

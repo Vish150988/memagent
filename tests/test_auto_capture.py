@@ -6,12 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from agentmemory.auto_capture import (
+from memagent.auto_capture import (
     _get_powershell_history_path,
     capture_from_git_log,
     capture_from_shell_history,
 )
-from agentmemory.core import MemoryEngine
+from memagent.core import MemoryEngine
 
 
 @pytest.fixture
@@ -86,7 +86,7 @@ def test_auto_capture_all_runs(temp_engine: MemoryEngine, tmp_path: Path) -> Non
         capture_output=True,
     )
 
-    from agentmemory.auto_capture import auto_capture_all
+    from memagent.auto_capture import auto_capture_all
 
     counts = auto_capture_all("demo", sources=["git"], engine=engine, cwd=tmp_path)
     assert counts["git"] >= 1

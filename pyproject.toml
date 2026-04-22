@@ -3,8 +3,8 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "agentmemory"
-version = "0.3.5"
+name = "memagent"
+version = "0.3.8"
 description = "Open-source cross-agent memory layer for AI coding agents"
 readme = "README.md"
 license = {text = "MIT"}
@@ -59,8 +59,8 @@ all = [
 ]
 
 [project.scripts]
-agentmemory = "agentmemory.cli:main"
-am = "agentmemory.cli:main"
+memagent = "memagent.cli:main"
+mg = "memagent.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/Vish150988/agentmemory"
@@ -75,8 +75,8 @@ target-version = "py310"
 select = ["E", "F", "I", "W"]
 
 [tool.ruff.lint.per-file-ignores]
-"agentmemory/dashboard.py" = ["E501"]
-"agentmemory/shell.py" = ["E501"]
+"memagent/dashboard.py" = ["E501"]
+"memagent/shell.py" = ["E501"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

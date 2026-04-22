@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from agentmemory.social import post_milestone
+from memagent.social import post_milestone
 
 
 def test_post_milestone_dry_run() -> None:

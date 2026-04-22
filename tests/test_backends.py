@@ -3,8 +3,8 @@
 import tempfile
 from pathlib import Path
 
-from agentmemory.core import MemoryEngine, MemoryEntry
-from agentmemory.semantic import SemanticIndex
+from memagent.core import MemoryEngine, MemoryEntry
+from memagent.semantic import SemanticIndex
 
 
 def test_tfidf_backend():

@@ -1,6 +1,6 @@
-"""Web dashboard for browsing and managing AgentMemory.
+"""Web dashboard for browsing and managing Memagent.
 
-Run with: agentmemory dashboard
+Run with: memagent dashboard
 Requires: pip install fastapi uvicorn
 """
 
@@ -18,14 +18,14 @@ except ImportError as e:
         "Dashboard requires fastapi. Install with: pip install fastapi uvicorn"
     ) from e
 
-app = FastAPI(title="AgentMemory Dashboard", version="0.1.0")
+app = FastAPI(title="memagent dashboard", version="0.1.0")
 
 INDEX_HTML = """<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AgentMemory Dashboard</title>
+<title>memagent dashboard</title>
 <style>
   :root[data-theme="dark"] {
     --bg:#0f0f23; --panel:#1a1a2e; --text:#e0e0e0; --accent:#4cc9f0;
@@ -82,7 +82,7 @@ INDEX_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <header>
-  <h1>AgentMemory Dashboard</h1>
+  <h1>memagent dashboard</h1>
   <span id="project-label" style="color:var(--muted);font-size:.9rem;"></span>
   <span class="refresh-indicator" id="refresh-indicator"></span>
   <button class="theme-toggle" onclick="toggleTheme()">🌓 Theme</button>
@@ -242,7 +242,7 @@ async function exportJSON(){
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'agentmemory-export-'+(p||'all')+'.json';
+  a.download = 'memagent-export-'+(p||'all')+'.json';
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -333,7 +333,7 @@ def api_capture(payload: dict[str, Any]) -> dict[str, Any]:
     project = payload.get("project", "default")
     entry = MemoryEntry(
         project=project,
-        session_id=os.environ.get("AGENTMEMORY_SESSION", str(uuid.uuid4())[:8]),
+        session_id=os.environ.get("MEMAGENT_SESSION", str(uuid.uuid4())[:8]),
         category=payload.get("category", "fact"),
         content=payload["content"],
         confidence=payload.get("confidence", 1.0),
