@@ -89,6 +89,10 @@ class MemoryEngine:
         """Get stored project context."""
         return self.backend.get_project_context(project)
 
+    def get_project_description(self, project: str) -> str:
+        """Get stored project description."""
+        return self.backend.get_project_description(project)
+
     def set_project_context(
         self,
         project: str,

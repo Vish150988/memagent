@@ -211,6 +211,18 @@ class PostgresBackend(MemoryBackend):
         finally:
             conn.close()
 
+    def get_project_description(self, project: str) -> str:
+        conn = self._connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT description FROM projects WHERE name = %s", (project,)
+                )
+                row = cur.fetchone()
+                return row[0] if row and row[0] else ""
+        finally:
+            conn.close()
+
     def set_project_context(
         self,
         project: str,

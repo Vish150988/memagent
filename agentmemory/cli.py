@@ -695,21 +695,7 @@ def migrate(
     # Migrate project contexts
     for proj in projects:
         ctx = source.get_project_context(proj)
-        desc = ""
-        # Try to fetch description if available via stats or other means
-        try:
-            from .backends.sqlite import SQLiteBackend
-
-            if isinstance(source.backend, SQLiteBackend):
-                conn = source.backend._connection()
-                row = conn.execute(
-                    "SELECT description FROM projects WHERE name = ?", (proj,)
-                ).fetchone()
-                if row:
-                    desc = row["description"] or ""
-                source.backend._close(conn)
-        except Exception:
-            pass
+        desc = source.get_project_description(proj)
         if ctx or desc:
             target.set_project_context(proj, ctx or {}, description=desc)
 

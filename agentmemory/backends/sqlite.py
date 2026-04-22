@@ -177,6 +177,16 @@ class SQLiteBackend(MemoryBackend):
         finally:
             self._close(conn)
 
+    def get_project_description(self, project: str) -> str:
+        conn = self._connection()
+        try:
+            row = conn.execute(
+                "SELECT description FROM projects WHERE name = ?", (project,)
+            ).fetchone()
+            return row["description"] if row and row["description"] else ""
+        finally:
+            self._close(conn)
+
     def set_project_context(
         self,
         project: str,

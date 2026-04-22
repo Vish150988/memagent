@@ -37,11 +37,13 @@ class TestMigrate:
 
         for proj in source.list_projects():
             ctx = source.get_project_context(proj)
-            if ctx:
-                target.set_project_context(proj, ctx)
+            desc = source.get_project_description(proj)
+            if ctx or desc:
+                target.set_project_context(proj, ctx, description=desc)
 
         assert len(target.recall(project="test-proj")) == 1
         assert target.get_project_context("test-proj") == {"key": "value"}
+        assert target.get_project_description("test-proj") == "desc"
 
     def test_migrate_preserves_embeddings(self, tmp_path: Path) -> None:
         """Embeddings should be transferable across backends."""

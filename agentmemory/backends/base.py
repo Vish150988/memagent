@@ -43,6 +43,10 @@ class MemoryBackend(ABC):
         """Get stored project context."""
 
     @abstractmethod
+    def get_project_description(self, project: str) -> str:
+        """Get stored project description."""
+
+    @abstractmethod
     def set_project_context(
         self,
         project: str,
