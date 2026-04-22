@@ -244,6 +244,67 @@ Your Terminal Agent
 
 ---
 
+## Storage Backends
+
+AgentMemory supports multiple storage backends. **SQLite is the default** — zero config, works offline, perfect for individuals.
+
+**PostgreSQL** is available for teams, concurrent access, and larger deployments.
+
+### SQLite (default)
+
+```bash
+# No configuration needed — works out of the box
+agentmemory init
+```
+
+Database file: `~/.agent-memory/memory.db`
+
+### PostgreSQL
+
+```bash
+# 1. Install with PostgreSQL support
+pip install agentmemory[postgres]
+
+# 2. Start PostgreSQL (Docker Compose included)
+docker compose up -d
+
+# 3. Set the connection URL
+export DATABASE_URL=postgresql://agentmemory:agentmemory@localhost:5432/agentmemory
+
+# 4. Initialize
+agentmemory init
+```
+
+### Switching Backends
+
+```python
+from agentmemory import MemoryEngine
+
+# Auto-detect: uses Postgres if DATABASE_URL is set, otherwise SQLite
+engine = MemoryEngine()
+
+# Explicit SQLite
+engine = MemoryEngine(backend="sqlite")
+
+# Explicit PostgreSQL
+engine = MemoryEngine(backend="postgres")
+```
+
+### Migrating Data
+
+```bash
+# Migrate all memories from SQLite to PostgreSQL
+agentmemory migrate --from-backend sqlite --to-backend postgres
+
+# Migrate a single project
+agentmemory migrate -p my-project --from-backend sqlite --to-backend postgres
+
+# Specify custom source DB or target DSN
+agentmemory migrate --from-db-path ./old.db --to-dsn postgresql://user:pass@host/db
+```
+
+---
+
 ## Roadmap
 
 - [x] Core SQLite engine
@@ -264,6 +325,7 @@ Your Terminal Agent
 - [x] Mem0 importer
 - [x] Social sharing
 - [x] VS Code extension
+- [x] Pluggable storage backends (SQLite + PostgreSQL)
 
 ---
 

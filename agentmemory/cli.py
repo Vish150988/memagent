@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import uuid
 from pathlib import Path
+from typing import Any
 
 import click
 from rich.console import Console
@@ -51,7 +52,7 @@ def _get_project() -> str:
 
 
 @click.group()
-@click.version_option(version="0.3.2")
+@click.version_option(version="0.3.3")
 def main() -> None:
     """AgentMemory — Cross-agent memory layer for AI coding agents."""
     pass
@@ -69,7 +70,7 @@ def main() -> None:
 def init(project: str | None, backend: str) -> None:
     """Initialize agent memory for the current project."""
     project = project or _get_project()
-    engine = MemoryEngine()
+    engine = MemoryEngine(backend=backend)
 
     # Store minimal project context
     engine.set_project_context(
@@ -84,7 +85,12 @@ def init(project: str | None, backend: str) -> None:
     console.print(
         f"[green][OK][/green] Initialized agent memory for project: [bold]{project}[/bold]"
     )
-    console.print(f"  Database: {DEFAULT_MEMORY_DIR / 'memory.db'}")
+    db_info = (
+        os.environ.get("DATABASE_URL", "localhost")
+        if backend in ("auto", "postgres")
+        else str(DEFAULT_MEMORY_DIR / "memory.db")
+    )
+    console.print(f"  Backend: {backend} ({db_info})")
 
 
 @main.command()
@@ -622,40 +628,96 @@ def import_(source_path: str, fmt: str, project: str | None) -> None:
 @main.command()
 @click.option("--from-backend", "-f", default="sqlite", type=click.Choice(["sqlite", "postgres"]))
 @click.option("--to-backend", "-t", default="postgres", type=click.Choice(["sqlite", "postgres"]))
+@click.option("--from-db-path", type=click.Path(), help="Source SQLite DB path")
+@click.option("--to-dsn", help="Target PostgreSQL DSN")
 @click.option("--project", "-p", help="Project to migrate (default: all)")
-def migrate(from_backend: str, to_backend: str, project: str | None) -> None:
+def migrate(
+    from_backend: str,
+    to_backend: str,
+    from_db_path: str | None,
+    to_dsn: str | None,
+    project: str | None,
+) -> None:
     """Migrate memories from one backend to another."""
-    from .core import MemoryEngine
-
     if from_backend == to_backend:
         console.print("[yellow]Source and target backend are the same. Nothing to do.[/yellow]")
         return
 
-    source = MemoryEngine(backend=from_backend)
-    target = MemoryEngine(backend=to_backend)
+    # Set up source engine
+    source_kwargs: dict[str, Any] = {"backend": from_backend}
+    if from_db_path:
+        source_kwargs["db_path"] = Path(from_db_path)
 
+    # Set up target engine
+    target_kwargs: dict[str, Any] = {"backend": to_backend}
+    if to_dsn:
+        os.environ["DATABASE_URL"] = to_dsn
+
+    try:
+        source = MemoryEngine(**source_kwargs)
+        target = MemoryEngine(**target_kwargs)
+    except ImportError as e:
+        console.print(f"[red][ERROR][/red] {e}")
+        raise click.Exit(1)
+
+    # Collect memories
     if project:
-        memories = source.recall(project=project, limit=100000)
+        memories = source.recall(project=project, limit=100_000)
+        projects = [project]
     else:
-        # Get all memories across all projects
-        memories = source.recall(limit=100000)
+        memories = source.recall(limit=100_000)
+        projects = source.list_projects()
 
+    # Migrate memories
     imported = 0
+    id_map: dict[int, int] = {}
     for m in memories:
-        # Reset ID so target generates a new one
+        old_id = m.id
         m.id = None
-        target.store(m)
+        new_id = target.store(m)
+        if old_id is not None:
+            id_map[old_id] = new_id
         imported += 1
 
+    # Migrate embeddings
+    for proj in projects:
+        # Try common model names; backends may vary
+        for model_name in ("tfidf", "sentence-transformers"):
+            try:
+                embeddings = source.get_embeddings(proj, model_name)
+                for old_id, emb in embeddings:
+                    new_id = id_map.get(old_id)
+                    if new_id:
+                        target.store_embedding(new_id, model_name, emb)
+            except Exception:
+                pass
+
     # Migrate project contexts
-    for proj in source.list_projects():
+    for proj in projects:
         ctx = source.get_project_context(proj)
-        if ctx:
-            target.set_project_context(proj, ctx)
+        desc = ""
+        # Try to fetch description if available via stats or other means
+        try:
+            from .backends.sqlite import SQLiteBackend
+
+            if isinstance(source.backend, SQLiteBackend):
+                conn = source.backend._connection()
+                row = conn.execute(
+                    "SELECT description FROM projects WHERE name = ?", (proj,)
+                ).fetchone()
+                if row:
+                    desc = row["description"] or ""
+                source.backend._close(conn)
+        except Exception:
+            pass
+        if ctx or desc:
+            target.set_project_context(proj, ctx or {}, description=desc)
 
     console.print(f"[green][OK][/green] Migrated [bold]{imported}[/bold] memories")
     console.print(f"  From: {from_backend}")
     console.print(f"  To: {to_backend}")
+    if projects:
+        console.print(f"  Projects: {', '.join(projects)}")
 
 
 @main.command()
