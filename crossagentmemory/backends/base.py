@@ -26,6 +26,9 @@ class MemoryBackend(ABC):
         category: str | None = None,
         limit: int = 50,
         session_id: str | None = None,
+        user_id: str | None = None,
+        tenant_id: str | None = None,
+        at_time: str | None = None,
     ) -> list[MemoryEntry]:
         """Recall memories with optional filtering."""
 
@@ -35,6 +38,9 @@ class MemoryBackend(ABC):
         keyword: str,
         project: str | None = None,
         limit: int = 20,
+        user_id: str | None = None,
+        tenant_id: str | None = None,
+        at_time: str | None = None,
     ) -> list[MemoryEntry]:
         """Keyword search over memory content."""
 
@@ -56,11 +62,11 @@ class MemoryBackend(ABC):
         """Set or update project context."""
 
     @abstractmethod
-    def stats(self) -> dict[str, Any]:
+    def stats(self, user_id: str | None = None, tenant_id: str | None = None) -> dict[str, Any]:
         """Return basic stats about the memory store."""
 
     @abstractmethod
-    def delete_project(self, project: str) -> int:
+    def delete_project(self, project: str, user_id: str | None = None, tenant_id: str | None = None) -> int:
         """Delete all memories for a project. Returns row count."""
 
     @abstractmethod
@@ -80,7 +86,7 @@ class MemoryBackend(ABC):
         """Return all distinct embedding model names for a project."""
 
     @abstractmethod
-    def list_projects(self) -> list[str]:
+    def list_projects(self, user_id: str | None = None, tenant_id: str | None = None) -> list[str]:
         """Return a list of all distinct project names."""
 
     @abstractmethod
@@ -90,6 +96,17 @@ class MemoryBackend(ABC):
     @abstractmethod
     def update_memory(self, memory_id: int, updates: dict[str, Any]) -> bool:
         """Update fields of an existing memory. Returns True if found."""
+
+    @abstractmethod
+    def recall_temporal(
+        self,
+        project: str | None = None,
+        at_time: str | None = None,
+        window_start: str | None = None,
+        window_end: str | None = None,
+        limit: int = 50,
+    ) -> list[MemoryEntry]:
+        """Recall memories with explicit temporal window filtering."""
 
     @abstractmethod
     def delete_memory(self, memory_id: int) -> bool:

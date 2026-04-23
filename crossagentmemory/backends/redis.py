@@ -65,6 +65,10 @@ class RedisBackend(MemoryBackend):
                 "source": entry.source or "",
                 "tags": entry.tags or "",
                 "metadata": entry.metadata or "{}",
+                "user_id": entry.user_id or "",
+                "tenant_id": entry.tenant_id or "",
+                "valid_from": entry.valid_from or "",
+                "valid_until": entry.valid_until or "",
             },
         )
         r.sadd(f"{KEY_PREFIX}:projects", entry.project)
@@ -77,6 +81,9 @@ class RedisBackend(MemoryBackend):
         category: str | None = None,
         limit: int = 50,
         session_id: str | None = None,
+        user_id: str | None = None,
+        tenant_id: str | None = None,
+        at_time: str | None = None,
     ) -> list[MemoryEntry]:
         r = self._client()
         ids: list[str] = []
@@ -94,6 +101,49 @@ class RedisBackend(MemoryBackend):
             entries = [e for e in entries if e.category == category]
         if session_id:
             entries = [e for e in entries if e.session_id == session_id]
+        if user_id is not None:
+            entries = [e for e in entries if e.user_id == user_id]
+        if tenant_id is not None:
+            entries = [e for e in entries if e.tenant_id == tenant_id]
+        if at_time is not None:
+            entries = [
+                e for e in entries
+                if (not e.valid_from or e.valid_from <= at_time)
+                and (not e.valid_until or e.valid_until >= at_time)
+            ]
+        return entries
+
+    def recall_temporal(
+        self,
+        project: str | None = None,
+        at_time: str | None = None,
+        window_start: str | None = None,
+        window_end: str | None = None,
+        limit: int = 50,
+    ) -> list[MemoryEntry]:
+        r = self._client()
+        ids: list[str] = []
+        if project:
+            ids = r.zrevrange(self._project_zset(project), 0, limit - 1)
+        else:
+            for key in r.scan_iter(match=f"{KEY_PREFIX}:memory:*"):
+                ids.append(key.split(":")[-1])
+            ids = ids[:limit]
+
+        entries = [self._load(r, int(mid)) for mid in ids]
+        entries = [e for e in entries if e is not None]
+        if at_time is not None:
+            entries = [
+                e for e in entries
+                if (not e.valid_from or e.valid_from <= at_time)
+                and (not e.valid_until or e.valid_until >= at_time)
+            ]
+        if window_start is not None and window_end is not None:
+            entries = [
+                e for e in entries
+                if (not e.valid_until or e.valid_until >= window_start)
+                and (not e.valid_from or e.valid_from <= window_end)
+            ]
         return entries
 
     def search(
@@ -101,6 +151,9 @@ class RedisBackend(MemoryBackend):
         keyword: str,
         project: str | None = None,
         limit: int = 20,
+        user_id: str | None = None,
+        tenant_id: str | None = None,
+        at_time: str | None = None,
     ) -> list[MemoryEntry]:
         r = self._client()
         results: list[MemoryEntry] = []
@@ -110,8 +163,19 @@ class RedisBackend(MemoryBackend):
                 if project and data.get("project") != project:
                     continue
                 entry = self._entry_from_hash(data)
-                if entry:
-                    results.append(entry)
+                if entry is None:
+                    continue
+                if user_id is not None and entry.user_id != user_id:
+                    continue
+                if tenant_id is not None and entry.tenant_id != tenant_id:
+                    continue
+                if at_time is not None:
+                    if not (
+                        (not entry.valid_from or entry.valid_from <= at_time)
+                        and (not entry.valid_until or entry.valid_until >= at_time)
+                    ):
+                        continue
+                results.append(entry)
                 if len(results) >= limit:
                     break
         return results
@@ -146,27 +210,49 @@ class RedisBackend(MemoryBackend):
         )
         r.sadd(f"{KEY_PREFIX}:projects", project)
 
-    def stats(self) -> dict[str, Any]:
+    def stats(self, user_id: str | None = None, tenant_id: str | None = None) -> dict[str, Any]:
         r = self._client()
         count = 0
-        for _ in r.scan_iter(match=f"{KEY_PREFIX}:memory:*"):
+        for key in r.scan_iter(match=f"{KEY_PREFIX}:memory:*"):
+            data = r.hgetall(key)
+            if user_id is not None and data.get("user_id") != user_id:
+                continue
+            if tenant_id is not None and data.get("tenant_id") != tenant_id:
+                continue
             count += 1
         return {"total_memories": count}
 
-    def delete_project(self, project: str) -> int:
+    def delete_project(self, project: str, user_id: str | None = None, tenant_id: str | None = None) -> int:
         r = self._client()
         ids = r.zrange(self._project_zset(project), 0, -1)
         pipe = r.pipeline()
+        deleted = 0
         for mid in ids:
+            data = r.hgetall(self._memory_key(int(mid)))
+            if not data or data.get("project") != project:
+                continue
+            if user_id is not None and data.get("user_id") != user_id:
+                continue
+            if tenant_id is not None and data.get("tenant_id") != tenant_id:
+                continue
             pipe.delete(self._memory_key(int(mid)))
             # Also delete any embeddings
             for emb_key in r.scan_iter(match=f"{KEY_PREFIX}:embedding:{mid}:*"):
                 pipe.delete(emb_key)
-        pipe.delete(self._project_zset(project))
-        pipe.delete(self._project_meta(project))
-        pipe.srem(f"{KEY_PREFIX}:projects", project)
-        pipe.execute()
-        return len(ids)
+            pipe.zrem(self._project_zset(project), mid)
+            deleted += 1
+        if deleted == 0:
+            # Nothing matched; skip executing pipeline that only had pre-existing commands
+            pipe.reset()
+        else:
+            pipe.execute()
+        # Clean up meta/projects set only if all entries for this project were removed
+        remaining = r.zcard(self._project_zset(project))
+        if remaining == 0:
+            r.delete(self._project_zset(project))
+            r.delete(self._project_meta(project))
+            r.srem(f"{KEY_PREFIX}:projects", project)
+        return deleted
 
     def store_embedding(
         self, memory_id: int, model_name: str, embedding: list[float]
@@ -198,9 +284,21 @@ class RedisBackend(MemoryBackend):
                 models.add(m)
         return sorted(models)
 
-    def list_projects(self) -> list[str]:
+    def list_projects(self, user_id: str | None = None, tenant_id: str | None = None) -> list[str]:
         r = self._client()
-        return sorted(r.smembers(f"{KEY_PREFIX}:projects"))
+        if user_id is None and tenant_id is None:
+            return sorted(r.smembers(f"{KEY_PREFIX}:projects"))
+        projects: set[str] = set()
+        for key in r.scan_iter(match=f"{KEY_PREFIX}:memory:*"):
+            data = r.hgetall(key)
+            if user_id is not None and data.get("user_id") != user_id:
+                continue
+            if tenant_id is not None and data.get("tenant_id") != tenant_id:
+                continue
+            proj = data.get("project")
+            if proj:
+                projects.add(proj)
+        return sorted(projects)
 
     def get_memory_by_id(self, memory_id: int) -> MemoryEntry | None:
         r = self._client()
@@ -221,6 +319,10 @@ class RedisBackend(MemoryBackend):
             "source",
             "tags",
             "metadata",
+            "user_id",
+            "tenant_id",
+            "valid_from",
+            "valid_until",
         }
         mapping = {}
         for k, v in updates.items():
@@ -265,4 +367,8 @@ class RedisBackend(MemoryBackend):
             source=data.get("source", ""),
             tags=data.get("tags", ""),
             metadata=data.get("metadata", "{}"),
+            user_id=data.get("user_id", ""),
+            tenant_id=data.get("tenant_id", ""),
+            valid_from=data.get("valid_from", ""),
+            valid_until=data.get("valid_until", ""),
         )

@@ -1,6 +1,6 @@
 """CrossAgentMemory — Open-source cross-agent memory layer for AI coding agents."""
 
-__version__ = "0.3.9"
+__version__ = "0.4.0"
 
 from .backends import MemoryBackend, SQLiteBackend
 from .core import MemoryEngine, MemoryEntry

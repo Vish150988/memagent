@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import Any
 
 from .core import MemoryEngine, MemoryEntry
+from .llm_extract import extract_memories_from_text
+from .llm import get_llm_client
 
 CLUADE_PROJECTS_DIR = Path.home() / ".claude" / "projects"
 
@@ -233,12 +235,66 @@ def _extract_claude_decisions(session_path: Path) -> list[dict[str, Any]]:
     return decisions
 
 
+def _extract_claude_with_llm(
+    session_path: Path,
+    project: str,
+    session_id: str,
+    client: Any | None = None,
+) -> list[MemoryEntry]:
+    """Use LLM to extract structured memories from a Claude session file."""
+    client = client or get_llm_client()
+    if not client.is_available():
+        return []
+
+    if not session_path.exists():
+        return []
+
+    # Read all assistant messages into a single transcript
+    transcript_parts: list[str] = []
+    try:
+        with session_path.open(encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    obj = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if obj.get("type") != "assistant":
+                    continue
+                message = obj.get("message", {})
+                for block in message.get("content", []):
+                    if block.get("type") == "text":
+                        text = block.get("text", "").strip()
+                        if text and len(text) > 20:
+                            transcript_parts.append(text)
+    except OSError:
+        return []
+
+    if not transcript_parts:
+        return []
+
+    transcript = "\n\n".join(transcript_parts)
+    return extract_memories_from_text(
+        transcript,
+        project=project,
+        session_id=session_id,
+        source="claude-code-llm",
+        client=client,
+    )
+
+
 def capture_from_claude_logs(
     project: str,
     max_sessions: int = 3,
     engine: MemoryEngine | None = None,
+    use_llm: bool = True,
 ) -> list[MemoryEntry]:
     """Parse recent Claude Code sessions and capture decisions.
+
+    If use_llm=True and an LLM is configured, uses LLM-powered extraction
+    for richer structured memories. Falls back to heuristic extraction.
 
     Returns list of MemoryEntry objects (not yet stored).
     """
@@ -269,12 +325,22 @@ def capture_from_claude_logs(
     session_files = session_files[:max_sessions]
 
     for sf in session_files:
+        session_id = f"claude-{sf.stem[:8]}"
+
+        # Try LLM extraction first if enabled
+        if use_llm:
+            llm_entries = _extract_claude_with_llm(sf, project, session_id)
+            if llm_entries:
+                entries.extend(llm_entries)
+                continue
+
+        # Fallback to heuristic extraction
         decisions = _extract_claude_decisions(sf)
         for dec in decisions:
             entries.append(
                 MemoryEntry(
                     project=project,
-                    session_id=f"claude-{sf.stem[:8]}",
+                    session_id=session_id,
                     category="decision",
                     content=dec["text"],
                     confidence=0.6,
@@ -291,10 +357,12 @@ def auto_capture_all(
     sources: list[str] | None = None,
     engine: MemoryEngine | None = None,
     cwd: Path | None = None,
+    use_llm: bool = True,
 ) -> dict[str, int]:
     """Run all enabled auto-capture sources and store memories.
 
     sources: list of 'shell', 'git', 'claude'. Defaults to all.
+    use_llm: if True, uses LLM-powered extraction for rich sources (Claude logs).
     Returns counts per source.
     """
     engine = engine or MemoryEngine()
@@ -314,7 +382,7 @@ def auto_capture_all(
         counts["git"] = len(entries)
 
     if "claude" in sources:
-        entries = capture_from_claude_logs(project, engine=engine)
+        entries = capture_from_claude_logs(project, engine=engine, use_llm=use_llm)
         for e in entries:
             engine.store(e)
         counts["claude"] = len(entries)

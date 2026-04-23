@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # Bump this whenever a new migration is added.
-CURRENT_SCHEMA_VERSION = 1
+CURRENT_SCHEMA_VERSION = 2
 
 _SQLITE_ENSURE_VERSION_TABLE = """
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -96,6 +96,35 @@ def set_schema_version(backend: MemoryBackend, version: int) -> None:
         )
 
 
+MIGRATIONS = [
+    # (version, description, sqlite_sql, postgres_sql)
+    (
+        2,
+        "Add user_id, tenant_id, valid_from, valid_until to memories",
+        """
+        ALTER TABLE memories ADD COLUMN user_id TEXT NOT NULL DEFAULT '';
+        ALTER TABLE memories ADD COLUMN tenant_id TEXT NOT NULL DEFAULT '';
+        ALTER TABLE memories ADD COLUMN valid_from TEXT NOT NULL DEFAULT '';
+        ALTER TABLE memories ADD COLUMN valid_until TEXT NOT NULL DEFAULT '';
+        CREATE INDEX IF NOT EXISTS idx_memories_user ON memories(user_id);
+        CREATE INDEX IF NOT EXISTS idx_memories_tenant ON memories(tenant_id);
+        CREATE INDEX IF NOT EXISTS idx_memories_valid_from ON memories(valid_from);
+        CREATE INDEX IF NOT EXISTS idx_memories_valid_until ON memories(valid_until);
+        """,
+        """
+        ALTER TABLE memories ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL DEFAULT '';
+        ALTER TABLE memories ADD COLUMN IF NOT EXISTS tenant_id TEXT NOT NULL DEFAULT '';
+        ALTER TABLE memories ADD COLUMN IF NOT EXISTS valid_from TIMESTAMPTZ;
+        ALTER TABLE memories ADD COLUMN IF NOT EXISTS valid_until TIMESTAMPTZ;
+        CREATE INDEX IF NOT EXISTS idx_memories_user ON memories(user_id);
+        CREATE INDEX IF NOT EXISTS idx_memories_tenant ON memories(tenant_id);
+        CREATE INDEX IF NOT EXISTS idx_memories_valid_from ON memories(valid_from);
+        CREATE INDEX IF NOT EXISTS idx_memories_valid_until ON memories(valid_until);
+        """,
+    ),
+]
+
+
 def run_migrations(backend: MemoryBackend) -> None:
     """Apply any pending schema migrations."""
     ensure_version_table(backend)
@@ -111,11 +140,19 @@ def run_migrations(backend: MemoryBackend) -> None:
         CURRENT_SCHEMA_VERSION,
     )
 
-    # Add future migrations here as (version, description, sqlite_sql, postgres_sql)
-    # e.g.:
-    # MIGRATIONS = [
-    #     (2, "Add foo column", "ALTER TABLE memories ADD COLUMN foo TEXT", "..."),
-    # ]
-    # For now there are no migrations beyond the initial schema.
+    for version, description, sqlite_sql, postgres_sql in MIGRATIONS:
+        if version <= current:
+            continue
+        logger.info("Running migration %d: %s", version, description)
+        sql = sqlite_sql if _is_sqlite(backend) else postgres_sql
+        # Split and execute each statement
+        for stmt in sql.strip().split(";"):
+            stmt = stmt.strip()
+            if stmt:
+                try:
+                    _execute_raw(backend, stmt)
+                except Exception as exc:
+                    logger.warning("Migration statement skipped: %s (%s)", stmt, exc)
+        current = version
 
     set_schema_version(backend, CURRENT_SCHEMA_VERSION)

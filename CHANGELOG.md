@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-04-23
+
+### Added
+- **Temporal reasoning** — validity windows for memories:
+  - `valid_from` and `valid_until` fields on `MemoryEntry`.
+  - `recall(at_time=...)` returns only memories valid at a specific ISO timestamp.
+  - `recall_temporal(window_start=..., window_end=...)` for window overlap queries.
+  - `search(at_time=...)` filters keyword search by temporal validity.
+  - Full support across SQLite, PostgreSQL, Chroma, and Redis backends.
+- **Multi-tenancy / SaaS readiness** — user and tenant isolation:
+  - `user_id` and `tenant_id` fields on `MemoryEntry`.
+  - All `recall`, `search`, `stats`, `delete_project`, and `list_projects` methods
+    accept optional `user_id` / `tenant_id` filters.
+  - Indexed for performance on SQLite and PostgreSQL.
+- **Real-time LLM-powered extraction** (`llm_extract.py`):
+  - `extract_memories_from_text()` — extracts atomic facts/decisions/actions from raw text.
+  - `extract_memories_from_conversation()` — extracts from chat message lists.
+  - `extract_temporal_facts()` — extracts time-bound facts with `valid_from` / `valid_until`.
+  - `extract_and_store()` — convenience wrapper that extracts and stores in one call.
+- **LLM-enhanced auto-capture** — Claude log ingestion now uses LLM extraction when
+  available, falling back to heuristic extraction when no LLM is configured.
+- **CLI enhancements**:
+  - `capture` gains `--user`, `--tenant`, `--valid-from`, `--valid-until`, `--llm-extract`.
+  - `recall` and `search` gain `--user`, `--tenant`, `--at-time`.
+  - New `recall-temporal` command with `--window-start` / `--window-end`.
+  - `capture-auto` gains `--use-llm` (default true).
+- **Schema migrations** (v1 → v2) automatically add new columns to existing databases.
+- `tests/test_temporal_multitenant.py` — 13 tests covering temporal + multi-tenant logic.
+- `tests/test_llm_extract.py` — 8 tests covering LLM extraction with mocked client.
+
+### Changed
+- Schema version bumped from 1 → 2.
+- `semantic.py` auto-detects `sentence-transformers` backend when installed.
+
 ## [0.3.7] - 2026-04-21
 
 ### Added

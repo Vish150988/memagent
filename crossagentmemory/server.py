@@ -41,7 +41,7 @@ except ImportError as e:
         "REST API requires fastapi. Install with: pip install fastapi uvicorn"
     ) from e
 
-app = FastAPI(title="CrossAgentMemory API", version="0.3.0")
+app = FastAPI(title="CrossAgentMemory API", version="0.4.0")
 
 
 def _engine() -> MemoryEngine:

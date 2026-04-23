@@ -13,6 +13,22 @@ from .base import MemoryBackend
 class ChromaBackend(MemoryBackend):
     """ChromaDB-backed memory storage with native vector search."""
 
+    ALLOWED_UPDATE_FIELDS = {
+        "project",
+        "session_id",
+        "timestamp",
+        "category",
+        "content",
+        "confidence",
+        "source",
+        "tags",
+        "metadata",
+        "user_id",
+        "tenant_id",
+        "valid_from",
+        "valid_until",
+    }
+
     def __init__(self, persist_dir: Path | None = None):
         self.persist_dir = persist_dir or (DEFAULT_MEMORY_DIR / "chroma")
         self.persist_dir.mkdir(parents=True, exist_ok=True)
@@ -42,6 +58,10 @@ class ChromaBackend(MemoryBackend):
             "tags": entry.tags or "",
             "metadata": entry.metadata or "{}",
             "confidence": float(entry.confidence),
+            "user_id": entry.user_id or "",
+            "tenant_id": entry.tenant_id or "",
+            "valid_from": entry.valid_from or "",
+            "valid_until": entry.valid_until or "",
         }
 
     def _from_doc(self, doc_id: str, document: str, meta: dict[str, Any]) -> MemoryEntry:
@@ -56,7 +76,31 @@ class ChromaBackend(MemoryBackend):
             source=meta.get("source", ""),
             tags=meta.get("tags", ""),
             metadata=meta.get("metadata", "{}"),
+            user_id=meta.get("user_id", ""),
+            tenant_id=meta.get("tenant_id", ""),
+            valid_from=meta.get("valid_from", ""),
+            valid_until=meta.get("valid_until", ""),
         )
+
+    @staticmethod
+    def _valid_at_time(entry: MemoryEntry, at_time: str) -> bool:
+        return (not entry.valid_from or entry.valid_from <= at_time) and (
+            not entry.valid_until or entry.valid_until >= at_time
+        )
+
+    @staticmethod
+    def _valid_in_window(
+        entry: MemoryEntry,
+        window_start: str | None,
+        window_end: str | None,
+    ) -> bool:
+        if window_start is not None:
+            if entry.valid_until and entry.valid_until < window_start:
+                return False
+        if window_end is not None:
+            if entry.valid_from and entry.valid_from > window_end:
+                return False
+        return True
 
     def store(self, entry: MemoryEntry) -> int:
         import uuid
@@ -78,6 +122,9 @@ class ChromaBackend(MemoryBackend):
         category: str | None = None,
         limit: int = 50,
         session_id: str | None = None,
+        user_id: str | None = None,
+        tenant_id: str | None = None,
+        at_time: str | None = None,
     ) -> list[MemoryEntry]:
         where: dict[str, Any] = {}
         if project:
@@ -86,6 +133,26 @@ class ChromaBackend(MemoryBackend):
             where["category"] = category
         if session_id:
             where["session_id"] = session_id
+        if user_id:
+            where["user_id"] = user_id
+        if tenant_id:
+            where["tenant_id"] = tenant_id
+
+        if at_time is not None:
+            # Fetch without limit so post-query temporal filtering doesn't truncate valid results
+            results = self._memories.get(
+                where=where if where else None,
+            )
+            entries = []
+            for i, doc_id in enumerate(results["ids"]):
+                meta = results["metadatas"][i]
+                doc = results["documents"][i]
+                entry = self._from_doc(doc_id, doc, meta)
+                if self._valid_at_time(entry, at_time):
+                    entries.append(entry)
+            # Sort by timestamp descending
+            entries.sort(key=lambda e: e.timestamp, reverse=True)
+            return entries[:limit]
 
         results = self._memories.get(
             where=where if where else None,
@@ -100,15 +167,65 @@ class ChromaBackend(MemoryBackend):
         entries.sort(key=lambda e: e.timestamp, reverse=True)
         return entries
 
+    def recall_temporal(
+        self,
+        project: str | None = None,
+        at_time: str | None = None,
+        window_start: str | None = None,
+        window_end: str | None = None,
+        limit: int = 50,
+    ) -> list[MemoryEntry]:
+        where: dict[str, Any] = {}
+        if project:
+            where["project"] = project
+
+        results = self._memories.get(where=where if where else None)
+        entries = []
+        for i, doc_id in enumerate(results["ids"]):
+            meta = results["metadatas"][i]
+            doc = results["documents"][i]
+            entry = self._from_doc(doc_id, doc, meta)
+            include = True
+            if at_time is not None:
+                include = include and self._valid_at_time(entry, at_time)
+            if window_start is not None or window_end is not None:
+                include = include and self._valid_in_window(entry, window_start, window_end)
+            if include:
+                entries.append(entry)
+        # Sort by timestamp descending
+        entries.sort(key=lambda e: e.timestamp, reverse=True)
+        return entries[:limit]
+
     def search(
         self,
         keyword: str,
         project: str | None = None,
         limit: int = 20,
+        user_id: str | None = None,
+        tenant_id: str | None = None,
+        at_time: str | None = None,
     ) -> list[MemoryEntry]:
         where: dict[str, Any] = {}
         if project:
             where["project"] = project
+        if user_id:
+            where["user_id"] = user_id
+        if tenant_id:
+            where["tenant_id"] = tenant_id
+
+        if at_time is not None:
+            results = self._memories.get(
+                where=where if where else None,
+                where_document={"$contains": keyword},
+            )
+            entries = []
+            for i, doc_id in enumerate(results["ids"]):
+                meta = results["metadatas"][i]
+                doc = results["documents"][i]
+                entry = self._from_doc(doc_id, doc, meta)
+                if self._valid_at_time(entry, at_time):
+                    entries.append(entry)
+            return entries[:limit]
 
         results = self._memories.get(
             where=where if where else None,
@@ -155,17 +272,38 @@ class ChromaBackend(MemoryBackend):
             metadatas=[{"context": json.dumps(context), "description": description}],
         )
 
-    def stats(self) -> dict[str, Any]:
-        count = self._memories.count()
+    def stats(self, user_id: str | None = None, tenant_id: str | None = None) -> dict[str, Any]:
+        if not user_id and not tenant_id:
+            count = self._memories.count()
+            return {"total_memories": count}
+
+        results = self._memories.get()
+        count = 0
+        for meta in results["metadatas"]:
+            if user_id and meta.get("user_id") != user_id:
+                continue
+            if tenant_id and meta.get("tenant_id") != tenant_id:
+                continue
+            count += 1
         return {"total_memories": count}
 
-    def delete_project(self, project: str) -> int:
+    def delete_project(self, project: str, user_id: str | None = None, tenant_id: str | None = None) -> int:
         results = self._memories.get(where={"project": project})
-        ids = results["ids"]
-        if ids:
-            self._memories.delete(ids=ids)
-        self._projects.delete(ids=[project])
-        return len(ids)
+        ids_to_delete = []
+        for i, doc_id in enumerate(results["ids"]):
+            meta = results["metadatas"][i]
+            if user_id and meta.get("user_id") != user_id:
+                continue
+            if tenant_id and meta.get("tenant_id") != tenant_id:
+                continue
+            ids_to_delete.append(doc_id)
+        if ids_to_delete:
+            self._memories.delete(ids=ids_to_delete)
+        # Only remove project metadata if no memories remain for this project
+        remaining = self._memories.get(where={"project": project})
+        if not remaining["ids"]:
+            self._projects.delete(ids=[project])
+        return len(ids_to_delete)
 
     def store_embedding(
         self, memory_id: int, model_name: str, embedding: list[float]
@@ -218,11 +356,14 @@ class ChromaBackend(MemoryBackend):
                     models.add(m)
         return sorted(models)
 
-    def list_projects(self) -> list[str]:
-        # Chroma doesn't support distinct queries; scan all metadata
+    def list_projects(self, user_id: str | None = None, tenant_id: str | None = None) -> list[str]:
         results = self._memories.get()
         projects: set[str] = set()
         for meta in results["metadatas"]:
+            if user_id and meta.get("user_id") != user_id:
+                continue
+            if tenant_id and meta.get("tenant_id") != tenant_id:
+                continue
             projects.add(meta.get("project", "default"))
         return sorted(projects)
 
@@ -238,7 +379,7 @@ class ChromaBackend(MemoryBackend):
         if entry is None:
             return False
         for key, value in updates.items():
-            if hasattr(entry, key):
+            if key in self.ALLOWED_UPDATE_FIELDS:
                 setattr(entry, key, value)
         doc_id = str(memory_id)
         self._memories.update(

@@ -80,7 +80,11 @@ class PostgresBackend(MemoryBackend):
                         confidence REAL NOT NULL DEFAULT 1.0,
                         source TEXT NOT NULL DEFAULT '',
                         tags TEXT NOT NULL DEFAULT '',
-                        metadata JSONB NOT NULL DEFAULT '{}'
+                        metadata JSONB NOT NULL DEFAULT '{}',
+                        user_id TEXT NOT NULL DEFAULT '',
+                        tenant_id TEXT NOT NULL DEFAULT '',
+                        valid_from TIMESTAMPTZ,
+                        valid_until TIMESTAMPTZ
                     )
                     """
                 )
@@ -92,6 +96,18 @@ class PostgresBackend(MemoryBackend):
                 )
                 cur.execute(
                     "CREATE INDEX IF NOT EXISTS idx_memories_category ON memories(category)"
+                )
+                cur.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_memories_user_id ON memories(user_id)"
+                )
+                cur.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_memories_tenant_id ON memories(tenant_id)"
+                )
+                cur.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_memories_valid_from ON memories(valid_from)"
+                )
+                cur.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_memories_valid_until ON memories(valid_until)"
                 )
                 cur.execute(
                     """
@@ -138,9 +154,10 @@ class PostgresBackend(MemoryBackend):
                     """
                     INSERT INTO memories (
                         project, session_id, timestamp, category,
-                        content, confidence, source, tags, metadata
+                        content, confidence, source, tags, metadata,
+                        user_id, tenant_id, valid_from, valid_until
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING id
                     """,
                     (
@@ -153,6 +170,10 @@ class PostgresBackend(MemoryBackend):
                         entry.source,
                         entry.tags,
                         entry.metadata,
+                        entry.user_id,
+                        entry.tenant_id,
+                        entry.valid_from if entry.valid_from else None,
+                        entry.valid_until if entry.valid_until else None,
                     ),
                 )
                 result = cur.fetchone()
@@ -169,6 +190,9 @@ class PostgresBackend(MemoryBackend):
         category: str | None = None,
         limit: int = 50,
         session_id: str | None = None,
+        user_id: str | None = None,
+        tenant_id: str | None = None,
+        at_time: str | None = None,
     ) -> list[MemoryEntry]:
         query = "SELECT * FROM memories WHERE 1=1"
         params: list[Any] = []
@@ -182,6 +206,68 @@ class PostgresBackend(MemoryBackend):
         if session_id:
             query += " AND session_id = %s"
             params.append(session_id)
+        if user_id:
+            query += " AND user_id = %s"
+            params.append(user_id)
+        if tenant_id:
+            query += " AND tenant_id = %s"
+            params.append(tenant_id)
+        if at_time:
+            query += (
+                " AND (valid_from IS NULL OR valid_from <= %s)"
+                " AND (valid_until IS NULL OR valid_until >= %s)"
+            )
+            params.extend([at_time, at_time])
+
+        query += " ORDER BY timestamp DESC LIMIT %s"
+        params.append(limit)
+
+        conn = self._connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(query, params)
+                rows = cur.fetchall()
+                cols = [desc[0] for desc in cur.description]
+                return [MemoryEntry(**dict(zip(cols, row))) for row in rows]
+        except Exception:
+            conn.close()
+            self._conn = None
+            raise
+
+    def recall_temporal(
+        self,
+        project: str | None = None,
+        at_time: str | None = None,
+        window_start: str | None = None,
+        window_end: str | None = None,
+        limit: int = 50,
+    ) -> list[MemoryEntry]:
+        query = "SELECT * FROM memories WHERE 1=1"
+        params: list[Any] = []
+
+        if project:
+            query += " AND project = %s"
+            params.append(project)
+
+        if at_time:
+            query += (
+                " AND (valid_from IS NULL OR valid_from <= %s)"
+                " AND (valid_until IS NULL OR valid_until >= %s)"
+            )
+            params.extend([at_time, at_time])
+
+        if window_start and window_end:
+            query += (
+                " AND (valid_until IS NULL OR valid_until >= %s)"
+                " AND (valid_from IS NULL OR valid_from <= %s)"
+            )
+            params.extend([window_start, window_end])
+        elif window_start:
+            query += " AND (valid_until IS NULL OR valid_until >= %s)"
+            params.append(window_start)
+        elif window_end:
+            query += " AND (valid_from IS NULL OR valid_from <= %s)"
+            params.append(window_end)
 
         query += " ORDER BY timestamp DESC LIMIT %s"
         params.append(limit)
@@ -203,6 +289,9 @@ class PostgresBackend(MemoryBackend):
         keyword: str,
         project: str | None = None,
         limit: int = 20,
+        user_id: str | None = None,
+        tenant_id: str | None = None,
+        at_time: str | None = None,
     ) -> list[MemoryEntry]:
         query = "SELECT * FROM memories WHERE content ILIKE %s"
         params: list[Any] = [f"%{keyword}%"]
@@ -210,6 +299,18 @@ class PostgresBackend(MemoryBackend):
         if project:
             query += " AND project = %s"
             params.append(project)
+        if user_id:
+            query += " AND user_id = %s"
+            params.append(user_id)
+        if tenant_id:
+            query += " AND tenant_id = %s"
+            params.append(tenant_id)
+        if at_time:
+            query += (
+                " AND (valid_from IS NULL OR valid_from <= %s)"
+                " AND (valid_until IS NULL OR valid_until >= %s)"
+            )
+            params.extend([at_time, at_time])
 
         query += " ORDER BY timestamp DESC LIMIT %s"
         params.append(limit)
@@ -283,21 +384,34 @@ class PostgresBackend(MemoryBackend):
             self._conn = None
             raise
 
-    def stats(self) -> dict[str, Any]:
+    def stats(self, user_id: str | None = None, tenant_id: str | None = None) -> dict[str, Any]:
+        where_clauses = []
+        params: list[Any] = []
+        if user_id:
+            where_clauses.append("user_id = %s")
+            params.append(user_id)
+        if tenant_id:
+            where_clauses.append("tenant_id = %s")
+            params.append(tenant_id)
+        where_sql = ""
+        if where_clauses:
+            where_sql = "WHERE " + " AND ".join(where_clauses)
+
         conn = self._connection()
         try:
             with conn.cursor() as cur:
-                cur.execute("SELECT COUNT(*) FROM memories")
+                cur.execute(f"SELECT COUNT(*) FROM memories {where_sql}", params)
                 total = cur.fetchone()[0]
 
-                cur.execute("SELECT COUNT(DISTINCT project) FROM memories")
+                cur.execute(f"SELECT COUNT(DISTINCT project) FROM memories {where_sql}", params)
                 projects = cur.fetchone()[0]
 
-                cur.execute("SELECT COUNT(DISTINCT session_id) FROM memories")
+                cur.execute(f"SELECT COUNT(DISTINCT session_id) FROM memories {where_sql}", params)
                 sessions = cur.fetchone()[0]
 
                 cur.execute(
-                    "SELECT category, COUNT(*) FROM memories GROUP BY category"
+                    f"SELECT category, COUNT(*) FROM memories {where_sql} GROUP BY category",
+                    params,
                 )
                 categories = {row[0]: row[1] for row in cur.fetchall()}
 
@@ -312,13 +426,22 @@ class PostgresBackend(MemoryBackend):
             self._conn = None
             raise
 
-    def delete_project(self, project: str) -> int:
+    def delete_project(self, project: str, user_id: str | None = None, tenant_id: str | None = None) -> int:
         conn = self._connection()
         try:
             with conn.cursor() as cur:
-                cur.execute("DELETE FROM memories WHERE project = %s", (project,))
+                query = "DELETE FROM memories WHERE project = %s"
+                params: list[Any] = [project]
+                if user_id:
+                    query += " AND user_id = %s"
+                    params.append(user_id)
+                if tenant_id:
+                    query += " AND tenant_id = %s"
+                    params.append(tenant_id)
+                cur.execute(query, params)
                 deleted = cur.rowcount
-                cur.execute("DELETE FROM projects WHERE name = %s", (project,))
+                if not user_id and not tenant_id:
+                    cur.execute("DELETE FROM projects WHERE name = %s", (project,))
             conn.commit()
             return deleted
         except Exception:
@@ -390,13 +513,21 @@ class PostgresBackend(MemoryBackend):
             self._conn = None
             raise
 
-    def list_projects(self) -> list[str]:
+    def list_projects(self, user_id: str | None = None, tenant_id: str | None = None) -> list[str]:
+        query = "SELECT DISTINCT project FROM memories WHERE 1=1"
+        params: list[Any] = []
+        if user_id:
+            query += " AND user_id = %s"
+            params.append(user_id)
+        if tenant_id:
+            query += " AND tenant_id = %s"
+            params.append(tenant_id)
+        query += " ORDER BY project"
+
         conn = self._connection()
         try:
             with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT DISTINCT project FROM memories ORDER BY project"
-                )
+                cur.execute(query, params)
                 return [row[0] for row in cur.fetchall()]
         except Exception:
             conn.close()
@@ -419,10 +550,25 @@ class PostgresBackend(MemoryBackend):
             raise
 
     def update_memory(self, memory_id: int, updates: dict[str, Any]) -> bool:
-        allowed = {"content", "category", "confidence", "tags"}
+        allowed = {
+            "content",
+            "category",
+            "confidence",
+            "tags",
+            "user_id",
+            "tenant_id",
+            "valid_from",
+            "valid_until",
+        }
         filtered = {k: v for k, v in updates.items() if k in allowed}
         if not filtered:
             return False
+
+        # Convert empty temporal strings to NULL
+        if "valid_from" in filtered and not filtered["valid_from"]:
+            filtered["valid_from"] = None
+        if "valid_until" in filtered and not filtered["valid_until"]:
+            filtered["valid_until"] = None
 
         conn = self._connection()
         try:

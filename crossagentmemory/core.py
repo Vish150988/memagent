@@ -26,6 +26,12 @@ class MemoryEntry:
     source: str = ""  # e.g., "claude-code", "codex", "user", "test"
     tags: str = ""  # comma-separated
     metadata: str = "{}"  # JSON blob for extensibility
+    # Multi-tenancy
+    user_id: str = ""  # owner of the memory (SaaS/user isolation)
+    tenant_id: str = ""  # organization/team isolation
+    # Temporal reasoning
+    valid_from: str = ""  # ISO timestamp when this memory becomes valid
+    valid_until: str = ""  # ISO timestamp when this memory expires
 
     def __post_init__(self):
         if not self.timestamp:
@@ -85,18 +91,29 @@ class MemoryEngine:
         category: Optional[str] = None,
         limit: int = 50,
         session_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        tenant_id: Optional[str] = None,
+        at_time: Optional[str] = None,
     ) -> list[MemoryEntry]:
-        """Recall memories with optional filtering."""
-        return self.backend.recall(project, category, limit, session_id)
+        """Recall memories with optional filtering.
+
+        Args:
+            at_time: ISO timestamp. Only returns memories valid at this time
+                     (valid_from <= at_time <= valid_untill, or open-ended).
+        """
+        return self.backend.recall(project, category, limit, session_id, user_id, tenant_id, at_time)
 
     def search(
         self,
         keyword: str,
         project: Optional[str] = None,
         limit: int = 20,
+        user_id: Optional[str] = None,
+        tenant_id: Optional[str] = None,
+        at_time: Optional[str] = None,
     ) -> list[MemoryEntry]:
         """Simple keyword search over memory content."""
-        return self.backend.search(keyword, project, limit)
+        return self.backend.search(keyword, project, limit, user_id, tenant_id, at_time)
 
     def get_project_context(self, project: str) -> dict[str, Any]:
         """Get stored project context."""
@@ -115,13 +132,13 @@ class MemoryEngine:
         """Set or update project context."""
         self.backend.set_project_context(project, context, description)
 
-    def stats(self) -> dict[str, Any]:
+    def stats(self, user_id: Optional[str] = None, tenant_id: Optional[str] = None) -> dict[str, Any]:
         """Return basic stats about the memory store."""
-        return self.backend.stats()
+        return self.backend.stats(user_id, tenant_id)
 
-    def delete_project(self, project: str) -> int:
+    def delete_project(self, project: str, user_id: Optional[str] = None, tenant_id: Optional[str] = None) -> int:
         """Delete all memories for a project. Returns number of rows deleted."""
-        return self.backend.delete_project(project)
+        return self.backend.delete_project(project, user_id, tenant_id)
 
     def store_embedding(
         self, memory_id: int, model_name: str, embedding: list[float]
@@ -139,9 +156,9 @@ class MemoryEngine:
         """Return all distinct embedding model names for a project."""
         return self.backend.list_embedding_models(project)
 
-    def list_projects(self) -> list[str]:
+    def list_projects(self, user_id: Optional[str] = None, tenant_id: Optional[str] = None) -> list[str]:
         """Return a list of all distinct project names."""
-        return self.backend.list_projects()
+        return self.backend.list_projects(user_id, tenant_id)
 
     def get_memory_by_id(self, memory_id: int) -> MemoryEntry | None:
         """Get a single memory by ID."""
@@ -150,6 +167,21 @@ class MemoryEngine:
     def update_memory(self, memory_id: int, updates: dict[str, Any]) -> bool:
         """Update fields of an existing memory. Returns True if found."""
         return self.backend.update_memory(memory_id, updates)
+
+    def recall_temporal(
+        self,
+        project: Optional[str] = None,
+        at_time: Optional[str] = None,
+        window_start: Optional[str] = None,
+        window_end: Optional[str] = None,
+        limit: int = 50,
+    ) -> list[MemoryEntry]:
+        """Recall memories with explicit temporal filtering.
+
+        - at_time: memories valid at a specific instant
+        - window_start / window_end: memories whose validity overlaps the window
+        """
+        return self.backend.recall_temporal(project, at_time, window_start, window_end, limit)
 
     def delete_memory(self, memory_id: int) -> bool:
         """Delete a single memory by ID. Returns True if deleted."""

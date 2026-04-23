@@ -52,7 +52,7 @@ def _get_project() -> str:
 
 
 @click.group()
-@click.version_option(version="0.3.5")
+@click.version_option(version="0.4.0")
 def main() -> None:
     """CrossAgentMemory — Cross-agent memory layer for AI coding agents."""
     pass
@@ -106,6 +106,11 @@ def init(project: str | None, backend: str) -> None:
 @click.option("--tags", "-t", default="", help="Comma-separated tags")
 @click.option("--source", "-s", default="user", help="Source of the memory")
 @click.option("--auto-tag", is_flag=True, help="Auto-generate tags using LLM")
+@click.option("--user", "-u", default="", help="User ID (multi-tenant)")
+@click.option("--tenant", default="", help="Tenant/organization ID")
+@click.option("--valid-from", default="", help="ISO timestamp when this memory becomes valid")
+@click.option("--valid-until", default="", help="ISO timestamp when this memory expires")
+@click.option("--llm-extract", is_flag=True, help="Use LLM to extract structured memories from content")
 def capture(
     content: str,
     project: str | None,
@@ -114,6 +119,11 @@ def capture(
     tags: str,
     source: str,
     auto_tag: bool,
+    user: str,
+    tenant: str,
+    valid_from: str,
+    valid_until: str,
+    llm_extract: bool,
 ) -> None:
     """Capture a memory entry."""
     project = project or _get_project()
@@ -128,6 +138,22 @@ def capture(
         if generated:
             tags = ",".join(generated)
 
+    if llm_extract:
+        from .llm_extract import extract_and_store
+
+        ids = extract_and_store(
+            content,
+            engine,
+            project=project,
+            session_id=session_id,
+            source=source,
+        )
+        console.print(
+            f"[green][OK][/green] LLM extracted [bold]{len(ids)}[/bold] memories"
+            f" in [bold]{project}[/bold]"
+        )
+        return
+
     entry = MemoryEntry(
         project=project,
         session_id=session_id,
@@ -136,6 +162,10 @@ def capture(
         confidence=confidence,
         source=source,
         tags=tags,
+        user_id=user,
+        tenant_id=tenant,
+        valid_from=valid_from,
+        valid_until=valid_until,
     )
     memory_id = engine.store(entry)
     tag_info = f" [dim](tags: {tags})[/dim]" if tags else ""
@@ -149,11 +179,17 @@ def capture(
 @click.option("--project", "-p", help="Project name")
 @click.option("--category", "-c", help="Filter by category")
 @click.option("--limit", "-n", default=20, help="Number of memories to show")
-def recall(project: str | None, category: str | None, limit: int) -> None:
+@click.option("--user", "-u", default=None, help="Filter by user ID")
+@click.option("--tenant", default=None, help="Filter by tenant ID")
+@click.option("--at-time", default=None, help="ISO timestamp: only memories valid at this time")
+def recall(project: str | None, category: str | None, limit: int, user: str | None, tenant: str | None, at_time: str | None) -> None:
     """Recall recent memories."""
     project = project or _get_project()
     engine = MemoryEngine()
-    memories = engine.recall(project=project, category=category, limit=limit)
+    memories = engine.recall(
+        project=project, category=category, limit=limit,
+        user_id=user, tenant_id=tenant, at_time=at_time,
+    )
 
     if not memories:
         console.print(f"[yellow]No memories found for project '{project}'[/yellow]")
@@ -178,15 +214,85 @@ def recall(project: str | None, category: str | None, limit: int) -> None:
     console.print(table)
 
 
+@main.command("recall-temporal")
+@click.option("--project", "-p", help="Project name")
+@click.option("--at-time", default=None, help="ISO timestamp: memories valid at this instant")
+@click.option("--window-start", default=None, help="ISO timestamp: start of validity window")
+@click.option("--window-end", default=None, help="ISO timestamp: end of validity window")
+@click.option("--limit", "-n", default=20, help="Number of memories to show")
+@click.option("--user", "-u", default=None, help="Filter by user ID")
+@click.option("--tenant", default=None, help="Filter by tenant ID")
+def recall_temporal(
+    project: str | None,
+    at_time: str | None,
+    window_start: str | None,
+    window_end: str | None,
+    limit: int,
+    user: str | None,
+    tenant: str | None,
+) -> None:
+    """Recall memories with temporal window filtering.
+
+    Examples:
+        cam recall-temporal --at-time 2024-03-15T00:00:00Z
+        cam recall-temporal --window-start 2024-01-01 --window-end 2024-06-01
+    """
+    project = project or _get_project()
+    engine = MemoryEngine()
+    memories = engine.recall_temporal(
+        project=project,
+        at_time=at_time,
+        window_start=window_start,
+        window_end=window_end,
+        limit=limit,
+    )
+
+    # Post-filter by user/tenant since backend may not handle all combinations
+    if user:
+        memories = [m for m in memories if m.user_id == user]
+    if tenant:
+        memories = [m for m in memories if m.tenant_id == tenant]
+
+    if not memories:
+        console.print(f"[yellow]No temporally valid memories found for project '{project}'[/yellow]")
+        return
+
+    table = Table(title=f"Temporal Memories — {project}")
+    table.add_column("ID", style="dim", width=6)
+    table.add_column("Category", width=12)
+    table.add_column("Content")
+    table.add_column("Valid From", width=12)
+    table.add_column("Valid Until", width=12)
+
+    for m in memories:
+        vf = m.valid_from[:10] if m.valid_from else "—"
+        vu = m.valid_until[:10] if m.valid_until else "—"
+        table.add_row(
+            str(m.id),
+            f"[bold]{m.category}[/bold]",
+            m.content[:80] + ("..." if len(m.content) > 80 else ""),
+            vf,
+            vu,
+        )
+
+    console.print(table)
+
+
 @main.command()
 @click.argument("keyword")
 @click.option("--project", "-p", help="Project name")
 @click.option("--limit", "-n", default=10)
-def search(keyword: str, project: str | None, limit: int) -> None:
+@click.option("--user", "-u", default=None, help="Filter by user ID")
+@click.option("--tenant", default=None, help="Filter by tenant ID")
+@click.option("--at-time", default=None, help="ISO timestamp: only memories valid at this time")
+def search(keyword: str, project: str | None, limit: int, user: str | None, tenant: str | None, at_time: str | None) -> None:
     """Search memories by keyword."""
     project = project or _get_project()
     engine = MemoryEngine()
-    results = engine.search(keyword, project=project, limit=limit)
+    results = engine.search(
+        keyword, project=project, limit=limit,
+        user_id=user, tenant_id=tenant, at_time=at_time,
+    )
 
     if not results:
         console.print(f"[yellow]No results for '{keyword}'[/yellow]")
@@ -253,7 +359,8 @@ def team_status_cmd(project: str | None, cwd: str) -> None:
     help="Comma-separated sources: shell, git, claude",
 )
 @click.option("--dry-run", is_flag=True, help="Preview without storing")
-def capture_auto(project: str | None, sources: str, dry_run: bool) -> None:
+@click.option("--use-llm", is_flag=True, default=True, help="Use LLM extraction for rich sources (Claude logs)")
+def capture_auto(project: str | None, sources: str, dry_run: bool, use_llm: bool) -> None:
     """Auto-capture memories from shell history, git log, and Claude sessions."""
     from .auto_capture import (
         auto_capture_all,
@@ -272,7 +379,7 @@ def capture_auto(project: str | None, sources: str, dry_run: bool) -> None:
         if "git" in source_list:
             entries.extend(capture_from_git_log(project))
         if "claude" in source_list:
-            entries.extend(capture_from_claude_logs(project))
+            entries.extend(capture_from_claude_logs(project, use_llm=use_llm))
         console.print(f"[bold]Dry run — would capture {len(entries)} memories:[/bold]\n")
         for e in entries[:10]:
             console.print(f"  [{e.category}] {e.content[:80]}...")
@@ -280,7 +387,7 @@ def capture_auto(project: str | None, sources: str, dry_run: bool) -> None:
             console.print(f"  ... and {len(entries) - 10} more")
         return
 
-    counts = auto_capture_all(project, sources=source_list)
+    counts = auto_capture_all(project, sources=source_list, use_llm=use_llm)
     total = sum(counts.values())
     console.print(f"[green][OK][/green] Auto-captured [bold]{total}[/bold] memories:")
     for src, count in counts.items():

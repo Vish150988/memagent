@@ -47,7 +47,11 @@ class SQLiteBackend(MemoryBackend):
                     confidence REAL NOT NULL DEFAULT 1.0,
                     source TEXT NOT NULL DEFAULT '',
                     tags TEXT NOT NULL DEFAULT '',
-                    metadata TEXT NOT NULL DEFAULT '{}'
+                    metadata TEXT NOT NULL DEFAULT '{}',
+                    user_id TEXT NOT NULL DEFAULT '',
+                    tenant_id TEXT NOT NULL DEFAULT '',
+                    valid_from TEXT NOT NULL DEFAULT '',
+                    valid_until TEXT NOT NULL DEFAULT ''
                 )
                 """
             )
@@ -60,6 +64,18 @@ class SQLiteBackend(MemoryBackend):
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_memories_category ON memories(category)"
             )
+            # New indexes may fail on pre-v2 databases until migrations run;
+            # swallow errors so migration can add the columns first.
+            for idx_sql in (
+                "CREATE INDEX IF NOT EXISTS idx_memories_user ON memories(user_id)",
+                "CREATE INDEX IF NOT EXISTS idx_memories_tenant ON memories(tenant_id)",
+                "CREATE INDEX IF NOT EXISTS idx_memories_valid_from ON memories(valid_from)",
+                "CREATE INDEX IF NOT EXISTS idx_memories_valid_until ON memories(valid_until)",
+            ):
+                try:
+                    conn.execute(idx_sql)
+                except sqlite3.OperationalError:
+                    pass
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS projects (
@@ -140,6 +156,23 @@ class SQLiteBackend(MemoryBackend):
         except Exception:
             pass
 
+    def _at_time_clause(self, params: list[Any], at_time: str | None) -> str:
+        """Generate SQL clause for temporal validity at a specific time."""
+        if not at_time:
+            return ""
+        params.extend([at_time, at_time])
+        return " AND (valid_from = '' OR valid_from <= ?) AND (valid_until = '' OR valid_until >= ?)"
+
+    def _user_tenant_clause(self, params: list[Any], user_id: str | None, tenant_id: str | None) -> str:
+        clause = ""
+        if user_id is not None:
+            clause += " AND user_id = ?"
+            params.append(user_id)
+        if tenant_id is not None:
+            clause += " AND tenant_id = ?"
+            params.append(tenant_id)
+        return clause
+
     def store(self, entry: MemoryEntry) -> int:
         conn = self._connection()
         try:
@@ -147,9 +180,10 @@ class SQLiteBackend(MemoryBackend):
                 """
                 INSERT INTO memories (
                     project, session_id, timestamp, category,
-                    content, confidence, source, tags, metadata
+                    content, confidence, source, tags, metadata,
+                    user_id, tenant_id, valid_from, valid_until
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     entry.project,
@@ -161,6 +195,10 @@ class SQLiteBackend(MemoryBackend):
                     entry.source,
                     entry.tags,
                     entry.metadata,
+                    entry.user_id,
+                    entry.tenant_id,
+                    entry.valid_from,
+                    entry.valid_until,
                 ),
             )
             rowid = cursor.lastrowid
@@ -177,6 +215,9 @@ class SQLiteBackend(MemoryBackend):
         category: str | None = None,
         limit: int = 50,
         session_id: str | None = None,
+        user_id: str | None = None,
+        tenant_id: str | None = None,
+        at_time: str | None = None,
     ) -> list[MemoryEntry]:
         query = "SELECT * FROM memories WHERE 1=1"
         params: list[Any] = []
@@ -190,6 +231,52 @@ class SQLiteBackend(MemoryBackend):
         if session_id:
             query += " AND session_id = ?"
             params.append(session_id)
+
+        query += self._user_tenant_clause(params, user_id, tenant_id)
+        query += self._at_time_clause(params, at_time)
+
+        query += " ORDER BY timestamp DESC LIMIT ?"
+        params.append(limit)
+
+        conn = self._connection()
+        try:
+            rows = conn.execute(query, params).fetchall()
+            return [MemoryEntry(**dict(row)) for row in rows]
+        finally:
+            self._close(conn)
+
+    def recall_temporal(
+        self,
+        project: str | None = None,
+        at_time: str | None = None,
+        window_start: str | None = None,
+        window_end: str | None = None,
+        limit: int = 50,
+    ) -> list[MemoryEntry]:
+        """Recall memories overlapping a temporal window.
+
+        If at_time is given, returns memories valid at that instant.
+        If window_start and/or window_end are given, returns memories whose
+        validity interval overlaps the window.
+        """
+        if at_time:
+            return self.recall(project=project, at_time=at_time, limit=limit)
+
+        query = "SELECT * FROM memories WHERE 1=1"
+        params: list[Any] = []
+
+        if project:
+            query += " AND project = ?"
+            params.append(project)
+
+        if window_start:
+            # Memory is valid if it hasn't expired before window_start
+            query += " AND (valid_until = '' OR valid_until >= ?)"
+            params.append(window_start)
+        if window_end:
+            # Memory is valid if it started before window_end
+            query += " AND (valid_from = '' OR valid_from <= ?)"
+            params.append(window_end)
 
         query += " ORDER BY timestamp DESC LIMIT ?"
         params.append(limit)
@@ -206,33 +293,44 @@ class SQLiteBackend(MemoryBackend):
         keyword: str,
         project: str | None = None,
         limit: int = 20,
+        user_id: str | None = None,
+        tenant_id: str | None = None,
+        at_time: str | None = None,
     ) -> list[MemoryEntry]:
         conn = self._connection()
         try:
             # Try FTS5 first for ranked full-text search
             try:
+                base_params: list[Any] = [keyword]
+                where_parts = ["memories_fts MATCH ?"]
                 if project:
-                    rows = conn.execute(
-                        """
-                        SELECT m.* FROM memories m
-                        JOIN memories_fts f ON m.rowid = f.rowid
-                        WHERE memories_fts MATCH ? AND m.project = ?
-                        ORDER BY rank
-                        LIMIT ?
-                        """,
-                        (keyword, project, limit),
-                    ).fetchall()
-                else:
-                    rows = conn.execute(
-                        """
-                        SELECT m.* FROM memories m
-                        JOIN memories_fts f ON m.rowid = f.rowid
-                        WHERE memories_fts MATCH ?
-                        ORDER BY rank
-                        LIMIT ?
-                        """,
-                        (keyword, limit),
-                    ).fetchall()
+                    where_parts.append("m.project = ?")
+                    base_params.append(project)
+                if user_id is not None:
+                    where_parts.append("m.user_id = ?")
+                    base_params.append(user_id)
+                if tenant_id is not None:
+                    where_parts.append("m.tenant_id = ?")
+                    base_params.append(tenant_id)
+                if at_time:
+                    where_parts.append("(m.valid_from = '' OR m.valid_from <= ?)")
+                    base_params.append(at_time)
+                    where_parts.append("(m.valid_until = '' OR m.valid_until >= ?)")
+                    base_params.append(at_time)
+
+                where_sql = " AND ".join(where_parts)
+                base_params.append(limit)
+
+                rows = conn.execute(
+                    f"""
+                    SELECT m.* FROM memories m
+                    JOIN memories_fts f ON m.rowid = f.rowid
+                    WHERE {where_sql}
+                    ORDER BY rank
+                    LIMIT ?
+                    """,
+                    base_params,
+                ).fetchall()
                 return [MemoryEntry(**dict(row)) for row in rows]
             except Exception:
                 pass
@@ -243,6 +341,8 @@ class SQLiteBackend(MemoryBackend):
             if project:
                 query += " AND project = ?"
                 params.append(project)
+            query += self._user_tenant_clause(params, user_id, tenant_id)
+            query += self._at_time_clause(params, at_time)
             query += " ORDER BY timestamp DESC LIMIT ?"
             params.append(limit)
             rows = conn.execute(query, params).fetchall()
@@ -296,18 +396,27 @@ class SQLiteBackend(MemoryBackend):
         finally:
             self._close(conn)
 
-    def stats(self) -> dict[str, Any]:
+    def stats(self, user_id: str | None = None, tenant_id: str | None = None) -> dict[str, Any]:
         conn = self._connection()
         try:
-            total = conn.execute("SELECT COUNT(*) as c FROM memories").fetchone()["c"]
+            where = "WHERE 1=1"
+            params: list[Any] = []
+            if user_id is not None:
+                where += " AND user_id = ?"
+                params.append(user_id)
+            if tenant_id is not None:
+                where += " AND tenant_id = ?"
+                params.append(tenant_id)
+
+            total = conn.execute(f"SELECT COUNT(*) as c FROM memories {where}", params).fetchone()["c"]
             projects = conn.execute(
-                "SELECT COUNT(DISTINCT project) as c FROM memories"
+                f"SELECT COUNT(DISTINCT project) as c FROM memories {where}", params
             ).fetchone()["c"]
             sessions = conn.execute(
-                "SELECT COUNT(DISTINCT session_id) as c FROM memories"
+                f"SELECT COUNT(DISTINCT session_id) as c FROM memories {where}", params
             ).fetchone()["c"]
             categories = conn.execute(
-                "SELECT category, COUNT(*) as c FROM memories GROUP BY category"
+                f"SELECT category, COUNT(*) as c FROM memories {where} GROUP BY category", params
             ).fetchall()
             return {
                 "total_memories": total,
@@ -318,10 +427,18 @@ class SQLiteBackend(MemoryBackend):
         finally:
             self._close(conn)
 
-    def delete_project(self, project: str) -> int:
+    def delete_project(self, project: str, user_id: str | None = None, tenant_id: str | None = None) -> int:
         conn = self._connection()
         try:
-            cursor = conn.execute("DELETE FROM memories WHERE project = ?", (project,))
+            query = "DELETE FROM memories WHERE project = ?"
+            params: list[Any] = [project]
+            if user_id is not None:
+                query += " AND user_id = ?"
+                params.append(user_id)
+            if tenant_id is not None:
+                query += " AND tenant_id = ?"
+                params.append(tenant_id)
+            cursor = conn.execute(query, params)
             conn.execute("DELETE FROM projects WHERE name = ?", (project,))
             conn.commit()
             return cursor.rowcount
@@ -383,12 +500,19 @@ class SQLiteBackend(MemoryBackend):
         finally:
             self._close(conn)
 
-    def list_projects(self) -> list[str]:
+    def list_projects(self, user_id: str | None = None, tenant_id: str | None = None) -> list[str]:
         conn = self._connection()
         try:
-            rows = conn.execute(
-                "SELECT DISTINCT project FROM memories ORDER BY project"
-            ).fetchall()
+            query = "SELECT DISTINCT project FROM memories WHERE 1=1"
+            params: list[Any] = []
+            if user_id is not None:
+                query += " AND user_id = ?"
+                params.append(user_id)
+            if tenant_id is not None:
+                query += " AND tenant_id = ?"
+                params.append(tenant_id)
+            query += " ORDER BY project"
+            rows = conn.execute(query, params).fetchall()
             return [row["project"] for row in rows]
         finally:
             self._close(conn)
@@ -406,7 +530,7 @@ class SQLiteBackend(MemoryBackend):
             self._close(conn)
 
     def update_memory(self, memory_id: int, updates: dict[str, Any]) -> bool:
-        allowed = {"content", "category", "confidence", "tags"}
+        allowed = {"content", "category", "confidence", "tags", "user_id", "tenant_id", "valid_from", "valid_until"}
         filtered = {k: v for k, v in updates.items() if k in allowed}
         if not filtered:
             return False
