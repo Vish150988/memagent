@@ -113,6 +113,7 @@ def init(project: str | None, backend: str) -> None:
 @click.option(
     "--llm-extract", is_flag=True, help="Use LLM to extract structured memories from content"
 )
+@click.option("--kg", is_flag=True, help="Auto-extract knowledge graph entities/relations")
 def capture(
     content: str,
     project: str | None,
@@ -126,6 +127,7 @@ def capture(
     valid_from: str,
     valid_until: str,
     llm_extract: bool,
+    kg: bool,
 ) -> None:
     """Capture a memory entry."""
     project = project or _get_project()
@@ -175,6 +177,17 @@ def capture(
         f"[green][OK][/green] Captured memory [bold]#{memory_id}[/bold]"
         f" in [bold]{project}[/bold]{tag_info}"
     )
+
+    if kg:
+        from .knowledge_graph import extract_and_store_for_memory
+
+        result = extract_and_store_for_memory(
+            project, memory_id, content, db_path=engine.db_path
+        )
+        if result["nodes"] or result["edges"]:
+            console.print(
+                f"[dim]  KG: +{result['nodes']} nodes, +{result['edges']} edges[/dim]"
+            )
 
 
 @main.command()
@@ -391,7 +404,8 @@ def team_status_cmd(project: str | None, cwd: str) -> None:
     default=True,
     help="Use LLM extraction for rich sources (Claude logs)",
 )
-def capture_auto(project: str | None, sources: str, dry_run: bool, use_llm: bool) -> None:
+@click.option("--kg", is_flag=True, help="Auto-extract knowledge graph after capture")
+def capture_auto(project: str | None, sources: str, dry_run: bool, use_llm: bool, kg: bool) -> None:
     """Auto-capture memories from shell history, git log, and Claude sessions."""
     from .auto_capture import (
         auto_capture_all,
@@ -423,6 +437,21 @@ def capture_auto(project: str | None, sources: str, dry_run: bool, use_llm: bool
     console.print(f"[green][OK][/green] Auto-captured [bold]{total}[/bold] memories:")
     for src, count in counts.items():
         console.print(f"  {src}: {count}")
+
+    if kg and total > 0:
+        from .knowledge_graph import extract_and_store_for_memory
+
+        engine = MemoryEngine()
+        memories = engine.recall(project=project, limit=total)
+        kg_nodes = 0
+        kg_edges = 0
+        for m in memories:
+            result = extract_and_store_for_memory(
+                project, m.id or 0, m.content, db_path=engine.db_path
+            )
+            kg_nodes += result["nodes"]
+            kg_edges += result["edges"]
+        console.print(f"[dim]  KG extraction: +{kg_nodes} nodes, +{kg_edges} edges[/dim]")
 
 
 @main.command()

@@ -90,6 +90,11 @@ INDEX_HTML = """<!DOCTYPE html>
   .kg-controls { display:flex; gap:.5rem; margin-bottom:.5rem; flex-wrap:wrap; }
   .kg-controls input { padding:.4rem .6rem; border-radius:6px; border:1px solid var(--border); background:var(--panel); color:var(--text); font-size:.85rem; }
   .kg-tooltip { position:absolute; background:var(--panel); border:1px solid var(--border); padding:.5rem; border-radius:6px; font-size:.8rem; pointer-events:none; display:none; z-index:100; }
+  .kg-detail { background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:1rem; margin-top:.5rem; font-size:.85rem; }
+  .kg-detail h4 { margin:0 0 .5rem; color:var(--accent); }
+  .kg-detail .edge-item { padding:.2rem 0; border-bottom:1px solid var(--border); }
+  .kg-detail .edge-item:last-child { border-bottom:none; }
+  .graph-indicator { font-size:.75rem; color:var(--accent); margin-left:.3rem; }
 </style>
 </head>
 <body>
@@ -123,10 +128,12 @@ INDEX_HTML = """<!DOCTYPE html>
         <input type="text" id="kg-start" placeholder="Start entity">
         <input type="text" id="kg-end" placeholder="End entity">
         <button onclick="findKgPaths()">Find Paths</button>
+        <input type="text" id="kg-filter" placeholder="Filter nodes..." oninput="filterKgNodes()">
         <button class="secondary" onclick="loadKgGraph()">Refresh Graph</button>
       </div>
       <canvas id="kg-canvas"></canvas>
       <div id="kg-tooltip" class="kg-tooltip"></div>
+      <div id="kg-detail" class="kg-detail" style="display:none;"></div>
     </div>
   </div>
   <div class="sidebar">
@@ -139,6 +146,7 @@ let currentProject = '';
 let autoRefresh = null;
 let currentSort = { column: 'id', direction: 'asc' };
 let allMemories = [];
+let kgMemoryMap = new Set();
 
 function getTheme(){ return localStorage.getItem('theme') || 'dark'; }
 function setTheme(t){ document.documentElement.setAttribute('data-theme', t); localStorage.setItem('theme', t); }
@@ -264,10 +272,11 @@ function renderMemories(memories) {
     } else if(m.valid_from || m.valid_until){
       validityBadge = '<span class="badge badge-valid">Valid</span>';
     }
+    const graphIndicator = kgMemoryMap.has(m.id) ? '<span class="graph-indicator" title="In knowledge graph">◈</span>' : '';
     html+=`<tr>
       <td>#${m.id}</td>
       <td><span class="badge badge-${m.category}">${m.category}</span> ${validityBadge}</td>
-      <td>${escapeHtml(m.content.substring(0,100))}${m.content.length>100?'...':''}<br><span class="confidence">${m.tags ? 'tags: ' + escapeHtml(m.tags) : ''}</span></td>
+      <td>${escapeHtml(m.content.substring(0,100))}${m.content.length>100?'...':''}${graphIndicator}<br><span class="confidence">${m.tags ? 'tags: ' + escapeHtml(m.tags) : ''}</span></td>
       <td>${escapeHtml(m.source||'-')}</td>
       <td>${(m.confidence||1).toFixed(2)}</td>
       <td>${escapeHtml(m.user_id||'-')}</td>
@@ -291,6 +300,11 @@ async function loadMemories(project, keyword='', category='') {
   const userId = document.getElementById('user-filter').value;
   const tenantId = document.getElementById('tenant-filter').value;
   const atTime = document.getElementById('at-time-filter').value;
+  // Fetch graph memory map in parallel
+  try {
+    const mapData = await fetchJSON('/api/kg/memory_map?project='+encodeURIComponent(project||'default'));
+    kgMemoryMap = new Set(mapData.memory_ids||[]);
+  } catch(e) { kgMemoryMap = new Set(); }
   let url = '/api/memories?project='+encodeURIComponent(project);
   if(category) url += '&category='+encodeURIComponent(category);
   if(userId) url += '&user_id='+encodeURIComponent(userId);
@@ -394,16 +408,28 @@ function showView(view) {
 }
 
 // ─── Knowledge Graph Canvas Renderer ───
-let kgNodes=[], kgEdges=[], kgNodeMap={}, kgSim=null, kgCtx=null, kgCanvas=null;
+let kgNodes=[], kgEdges=[], kgNodeMap={}, kgCtx=null, kgCanvas=null;
 let kgDragNode=null, kgHoverNode=null, kgOffsetX=0, kgOffsetY=0;
+let kgSelectedNode=null, kgPathSet=new Set();
+let kgFilterText='';
+
+function _kgPosKey(project) { return 'kg_pos_'+project; }
 
 async function loadKgGraph() {
   const project = document.getElementById('project-select').value || 'default';
   const data = await fetchJSON('/api/kg?project='+encodeURIComponent(project));
-  kgNodes = (data.nodes||[]).map(n => ({...n, x: Math.random()*600+100, y: Math.random()*400+100, vx:0, vy:0}));
+  const saved = JSON.parse(localStorage.getItem(_kgPosKey(project))||'{}');
+  kgNodes = (data.nodes||[]).map(n => ({
+    ...n,
+    x: saved[n.id] ? saved[n.id][0] : Math.random()*600+100,
+    y: saved[n.id] ? saved[n.id][1] : Math.random()*400+100,
+    vx:0, vy:0, visible:true
+  }));
   kgEdges = (data.edges||[]).map(e => ({...e}));
   kgNodeMap = {};
   kgNodes.forEach(n => kgNodeMap[n.id] = n);
+  kgFilterText = '';
+  document.getElementById('kg-filter').value = '';
   initKgCanvas();
   kgAnimate();
 }
@@ -418,12 +444,14 @@ function initKgCanvas() {
   kgCanvas.onmousemove = kgMouseMove;
   kgCanvas.onmouseup = kgMouseUp;
   kgCanvas.onmouseleave = kgMouseUp;
+  kgCanvas.onclick = kgMouseClick;
 }
 
 function kgMouseDown(e) {
   const rect = kgCanvas.getBoundingClientRect();
   const mx = e.clientX - rect.left, my = e.clientY - rect.top;
   for(const n of kgNodes) {
+    if(!n.visible) continue;
     const dx = mx - n.x, dy = my - n.y;
     if(dx*dx + dy*dy < 400) { kgDragNode = n; kgOffsetX = dx; kgOffsetY = dy; return; }
   }
@@ -431,9 +459,15 @@ function kgMouseDown(e) {
 function kgMouseMove(e) {
   const rect = kgCanvas.getBoundingClientRect();
   const mx = e.clientX - rect.left, my = e.clientY - rect.top;
-  if(kgDragNode) { kgDragNode.x = mx - kgOffsetX; kgDragNode.y = my - kgOffsetY; return; }
+  if(kgDragNode) {
+    kgDragNode.x = mx - kgOffsetX;
+    kgDragNode.y = my - kgOffsetY;
+    kgSavePositions();
+    return;
+  }
   kgHoverNode = null;
   for(const n of kgNodes) {
+    if(!n.visible) continue;
     const dx = mx - n.x, dy = my - n.y;
     if(dx*dx + dy*dy < 400) kgHoverNode = n;
   }
@@ -445,6 +479,57 @@ function kgMouseMove(e) {
 }
 function kgMouseUp() { kgDragNode = null; }
 
+function kgSavePositions() {
+  const project = document.getElementById('project-select').value || 'default';
+  const saved = {};
+  for(const n of kgNodes) saved[n.id] = [n.x, n.y];
+  localStorage.setItem(_kgPosKey(project), JSON.stringify(saved));
+}
+
+async function kgMouseClick(e) {
+  if(kgDragNode) return;
+  if(kgHoverNode) {
+    kgSelectedNode = kgHoverNode;
+    await showKgNodeDetail(kgHoverNode);
+  } else {
+    kgSelectedNode = null;
+    document.getElementById('kg-detail').style.display = 'none';
+  }
+}
+
+async function showKgNodeDetail(node) {
+  const project = document.getElementById('project-select').value || 'default';
+  const detail = document.getElementById('kg-detail');
+  detail.style.display = 'block';
+  detail.innerHTML = `<h4>${escapeHtml(node.name)} <span style="color:var(--muted);font-size:.75rem;">[${node.type}]</span></h4><div>Loading...</div>`;
+  try {
+    const data = await fetchJSON('/api/kg/node/'+node.id+'?project='+encodeURIComponent(project));
+    let html = `<h4>${escapeHtml(node.name)} <span style="color:var(--muted);font-size:.75rem;">[${node.type}]</span></h4>`;
+    if(data.edges && data.edges.length) {
+      html += `<div style="margin-bottom:.5rem;font-weight:600;">Connections:</div>`;
+      for(const edge of data.edges) {
+        const otherId = edge.source_id===node.id ? edge.target_id : edge.source_id;
+        const other = kgNodeMap[otherId];
+        const dir = edge.source_id===node.id ? '→' : '←';
+        html += `<div class="edge-item">${dir} ${other ? escapeHtml(other.name) : '#'+otherId} <span style="color:var(--muted)">(${edge.relation})</span></div>`;
+      }
+    }
+    if(data.memory_ids && data.memory_ids.length) {
+      html += `<div style="margin-top:.5rem;font-weight:600;">Source memories: ${data.memory_ids.map(id => '#'+id).join(', ')}</div>`;
+    }
+    detail.innerHTML = html;
+  } catch(err) {
+    detail.innerHTML = `<h4>${escapeHtml(node.name)}</h4><div style="color:var(--danger)">Failed to load details</div>`;
+  }
+}
+
+function filterKgNodes() {
+  kgFilterText = document.getElementById('kg-filter').value.toLowerCase();
+  for(const n of kgNodes) {
+    n.visible = !kgFilterText || n.name.toLowerCase().includes(kgFilterText) || n.type.toLowerCase().includes(kgFilterText);
+  }
+}
+
 function kgAnimate() {
   if(document.getElementById('graph-view').style.display === 'none') return;
   kgSimulate();
@@ -454,10 +539,11 @@ function kgAnimate() {
 
 function kgSimulate() {
   const W = kgCanvas.width, H = kgCanvas.height;
+  const visibleNodes = kgNodes.filter(n => n.visible);
   // Repulsion
-  for(let i=0;i<kgNodes.length;i++) {
-    for(let j=i+1;j<kgNodes.length;j++) {
-      const a = kgNodes[i], b = kgNodes[j];
+  for(let i=0;i<visibleNodes.length;i++) {
+    for(let j=i+1;j<visibleNodes.length;j++) {
+      const a = visibleNodes[i], b = visibleNodes[j];
       let dx = a.x - b.x, dy = a.y - b.y;
       let dist = Math.sqrt(dx*dx+dy*dy) || 1;
       const f = 2000/(dist*dist);
@@ -469,7 +555,7 @@ function kgSimulate() {
   // Spring attraction
   for(const e of kgEdges) {
     const a = kgNodeMap[e.source], b = kgNodeMap[e.target];
-    if(!a || !b) continue;
+    if(!a || !b || !a.visible || !b.visible) continue;
     let dx = b.x - a.x, dy = b.y - a.y;
     let dist = Math.sqrt(dx*dx+dy*dy) || 1;
     const f = (dist-120)*0.003;
@@ -478,7 +564,7 @@ function kgSimulate() {
     b.vx -= dx*f; b.vy -= dy*f;
   }
   // Center gravity
-  for(const n of kgNodes) {
+  for(const n of visibleNodes) {
     n.vx += (W/2 - n.x)*0.0005;
     n.vy += (H/2 - n.y)*0.0005;
     n.vx *= 0.9; n.vy *= 0.9;
@@ -495,8 +581,10 @@ function kgDraw() {
   ctx.lineWidth = 1.5;
   for(const e of kgEdges) {
     const a = kgNodeMap[e.source], b = kgNodeMap[e.target];
-    if(!a || !b) continue;
-    ctx.strokeStyle = getTheme()==='dark' ? '#555' : '#ccc';
+    if(!a || !b || !a.visible || !b.visible) continue;
+    const isPath = kgPathSet.has(e.source+'-'+e.target) || kgPathSet.has(e.target+'-'+e.source);
+    ctx.strokeStyle = isPath ? (getTheme()==='dark' ? '#4ade80' : '#198754') : (getTheme()==='dark' ? '#555' : '#ccc');
+    ctx.lineWidth = isPath ? 3 : 1.5;
     ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
     const mx = (a.x+b.x)/2, my = (a.y+b.y)/2;
     ctx.fillStyle = getTheme()==='dark' ? '#888' : '#666';
@@ -505,12 +593,14 @@ function kgDraw() {
   }
   // Draw nodes
   for(const n of kgNodes) {
+    if(!n.visible) continue;
     ctx.beginPath();
-    ctx.arc(n.x, n.y, n===kgHoverNode ? 10 : 7, 0, Math.PI*2);
+    const radius = n===kgSelectedNode ? 12 : (n===kgHoverNode ? 10 : 7);
+    ctx.arc(n.x, n.y, radius, 0, Math.PI*2);
     ctx.fillStyle = kgNodeColor(n.type);
     ctx.fill();
-    ctx.strokeStyle = getTheme()==='dark' ? '#fff' : '#333';
-    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = n===kgSelectedNode ? (getTheme()==='dark' ? '#4ade80' : '#198754') : (getTheme()==='dark' ? '#fff' : '#333');
+    ctx.lineWidth = n===kgSelectedNode ? 3 : 1.5;
     ctx.stroke();
     ctx.fillStyle = getTheme()==='dark' ? '#e0e0e0' : '#212529';
     ctx.font = '11px sans-serif';
@@ -535,14 +625,13 @@ async function findKgPaths() {
   if(!start || !end) return alert('Enter start and end entities');
   const data = await fetchJSON('/api/kg/paths?project='+encodeURIComponent(project)+'&start='+encodeURIComponent(start)+'&end='+encodeURIComponent(end));
   if(!data.paths || !data.paths.length) return alert('No paths found');
-  // Highlight first path by temporarily boosting edge weights
-  const pathSet = new Set();
+  kgPathSet.clear();
   for(const edge of data.paths[0]) {
-    pathSet.add(edge.source+'-'+edge.target);
+    kgPathSet.add(edge.source+'-'+edge.target);
   }
-  // Visual feedback: could flash edges; for now just log
-  console.log('Path found:', data.paths[0]);
-  alert('Path found with ' + data.paths[0].length + ' hops — see console');
+  // Auto-show start node detail
+  const startNode = kgNodes.find(n => n.name.toLowerCase() === start.toLowerCase());
+  if(startNode) { kgSelectedNode = startNode; showKgNodeDetail(startNode); }
 }
 
 if(autoRefresh) clearInterval(autoRefresh);
@@ -803,6 +892,57 @@ def api_kg_paths(
         db_path=engine.db_path,
     )
     return {"paths": paths}
+
+
+@app.get("/api/kg/memory_map")
+def api_kg_memory_map(
+    project: str = "",
+) -> dict[str, Any]:
+    """Return memory IDs that have associated graph edges."""
+    import sqlite3
+
+    engine = MemoryEngine()
+    conn = sqlite3.connect(engine.db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        rows = conn.execute(
+            "SELECT DISTINCT memory_id FROM graph_edges WHERE project = ? AND memory_id IS NOT NULL",
+            (project or "default",),
+        ).fetchall()
+        return {"memory_ids": [row["memory_id"] for row in rows]}
+    finally:
+        conn.close()
+
+
+@app.get("/api/kg/node/{node_id}")
+def api_kg_node(node_id: int, project: str = "") -> dict[str, Any]:
+    """Get node details, connected edges, and related memory IDs."""
+    import sqlite3
+
+    engine = MemoryEngine()
+    conn = sqlite3.connect(engine.db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        node = conn.execute(
+            "SELECT * FROM graph_nodes WHERE id = ?", (node_id,)
+        ).fetchone()
+        if not node:
+            return {"error": "Node not found"}
+        edges = conn.execute(
+            "SELECT * FROM graph_edges WHERE project = ? AND (source_id = ? OR target_id = ?)",
+            (project or "default", node_id, node_id),
+        ).fetchall()
+        memory_ids = list({
+            e["memory_id"] for e in edges
+            if e["memory_id"] is not None
+        })
+        return {
+            "node": dict(node),
+            "edges": [dict(e) for e in edges],
+            "memory_ids": memory_ids,
+        }
+    finally:
+        conn.close()
 
 
 def run_dashboard(host: str = "127.0.0.1", port: int = 8745) -> None:
